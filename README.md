@@ -80,7 +80,7 @@ Alternatively, you can download our [Swell UI](https://github.com/egovelox/swell
 then just install the browser add-on, and you will be able to use the bundled CLI.
 
 📌 Important note :  
-Please ensure you are using the same version (e.g `4.0.0`) for the add-on and for the other components  
+Please ensure you are using the same `major` version (e.g `4.x.y`) for the add-on and for the other components  
 ( native-app and CLI ).
 
 
@@ -90,8 +90,7 @@ The mozeidon addon for Mozilla Firefox can be found here :
 
 [https://addons.mozilla.org/en-US/firefox/addon/mozeidon](https://addons.mozilla.org/en-US/firefox/addon/mozeidon)
 
-Latest version : `3.0` ( compatible with CLI >= 3.0.0 )  
-New version coming soon : `4.0` ( compatible with CLI >= 4.0.0 )
+Latest version : `4.1` ( compatible with CLI >= 4.0.0 )  
 
 ## Mozeidon chrome-addon
 
@@ -99,8 +98,7 @@ The mozeidon addon for Google Chrome can be found here :
 
 [https://chromewebstore.google.com/detail/mozeidon/lipjcjopdojfmfjmnponpjkkccbjoipe](https://chromewebstore.google.com/detail/mozeidon/lipjcjopdojfmfjmnponpjkkccbjoipe)
 
-Latest version : `3.0` ( compatible with CLI >= 3.0.0 )  
-New version coming soon : `4.0` ( compatible with CLI >= 4.0.0 )
+Latest version : `4.1` ( compatible with CLI >= 4.0.0 )  
 
 ## Mozeidon native-app
 
