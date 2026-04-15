@@ -292,7 +292,7 @@ Keeping this in a fork makes the setup repeatable:
 
 ## License
 
-This repository follows the upstream project license unless noted otherwise.
+This repository follows the upstream project license unless noted otherwise; https://github.com/egovelox/mozeidon
 
 The Zen logo's and icons are all licensed under CC BY-NC-SA 4.0; https://github.com/zen-browser/branding-archive
 
