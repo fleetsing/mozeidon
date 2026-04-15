@@ -1,4 +1,302 @@
-# 🔱 Mozeidon 
+# 🔱 Mozeidon  (Zen + Raycast patched fork)
+
+This fork tracks the upstream [egovelox/mozeidon](https://github.com/egovelox/mozeidon) project and exists for one practical reason:
+
+**make the bundled Raycast extension work correctly with Zen Browser on macOS.**
+
+The upstream Mozeidon browser add-on, native app, and CLI already work with Firefox-derived browsers such as Zen. The problem this fork fixes is specific to the Raycast extension startup logic.
+
+## Why this fork exists
+
+The upstream Raycast extension assumes that the target browser is Firefox.
+
+That matters on macOS because the current Raycast startup path:
+
+- checks whether a browser process named `Firefox` is running
+- asks macOS to activate the application `"Firefox"`
+- still uses Firefox-oriented labels in the Raycast extension metadata
+
+When Mozeidon is working in Zen but the Raycast extension still thinks only Firefox is valid, the Raycast window can immediately dismiss itself during startup instead of loading tabs and bookmarks.
+
+This fork keeps the upstream project structure and functionality intact, while carrying a small Zen-specific compatibility patch for the Raycast extension.
+
+## What changed in this fork
+
+The functional patch is intentionally small and isolated.
+
+### Patched file
+
+`raycast/src/actions/index.ts`
+
+### What was changed
+
+The upstream implementation used AppleScript and process-name checks for `Firefox`.
+
+This fork changes the Raycast extension to target **Zen Browser by bundle ID** instead:
+
+- `startFirefox()` now activates:
+  `application id "app.zen-browser.zen"`
+- `isFirefoxRunning()` now checks whether:
+  `application id "app.zen-browser.zen" is running`
+
+That allows the Raycast extension to detect and activate Zen correctly on macOS.
+
+### Patch used in this fork
+
+```ts
+export async function startFirefox() {
+  await runAppleScript(`
+try
+  tell application id "app.zen-browser.zen" to activate
+end try
+`);
+}
+
+export async function isFirefoxRunning() {
+  const isFirefoxRunning = await runAppleScript(`
+try
+  if application id "app.zen-browser.zen" is running then
+    return true
+  else
+    return false
+  end if
+on error
+  return false
+end try
+`);
+  return isFirefoxRunning !== "false";
+}
+```
+
+## What did **not** change
+
+This fork does **not** change the core Mozeidon architecture.
+
+You still use the same three main components:
+
+1. the Mozeidon browser add-on
+2. the Mozeidon native app
+3. the Mozeidon CLI
+
+The Raycast extension is simply a local frontend for those components.
+
+## Fresh install on a new Mac
+
+These steps assume:
+
+- macOS on Apple Silicon
+- Zen Browser is the target browser
+- Homebrew is installed
+- Raycast is installed
+
+## Prerequisites
+
+Install or prepare the following first:
+
+- **Zen Browser**
+- **Raycast**
+- **Node.js 22.14+**
+- **npm 7+**
+- a signed-in Raycast account
+
+## 1. Install the Mozeidon browser add-on in Zen
+
+Open the Firefox add-on page in Zen and install the Mozeidon add-on:
+
+- https://addons.mozilla.org/en-US/firefox/addon/mozeidon/
+
+Zen is Firefox-derived, so the Firefox add-on is the one you want.
+
+## 2. Install the Mozeidon native app and CLI
+
+```bash
+brew tap egovelox/homebrew-mozeidon
+brew install egovelox/mozeidon/mozeidon-native-app
+brew install egovelox/mozeidon/mozeidon
+```
+
+## 3. Configure native messaging on macOS
+
+Create the Firefox/Mozilla native-messaging manifest for Mozeidon.
+
+```bash
+mkdir -p "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
+
+MOZEIDON_NATIVE_APP="$(command -v mozeidon-native-app)"
+
+cat > "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts/mozeidon.json" <<JSON
+{
+  "name": "mozeidon",
+  "description": "Native messaging add-on to interact with your browser",
+  "path": "$MOZEIDON_NATIVE_APP",
+  "type": "stdio",
+  "allowed_extensions": ["mozeidon-addon@egovelox.com"]
+}
+JSON
+```
+
+### Optional Zen compatibility shim
+
+If Zen ever fails to detect the native host on a given machine, also mirror the manifest into Zen’s own native-messaging directory:
+
+```bash
+mkdir -p "$HOME/Library/Application Support/zen/NativeMessagingHosts"
+
+ln -sf \
+  "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts/mozeidon.json" \
+  "$HOME/Library/Application Support/zen/NativeMessagingHosts/mozeidon.json"
+```
+
+## 4. Verify that Mozeidon itself works before touching Raycast
+
+Run:
+
+```bash
+mozeidon tabs get
+```
+
+If that command returns valid data from Zen, your browser add-on, native app, and CLI are wired up correctly.
+
+Do not continue to the Raycast step until this works.
+
+## 5. Clone this fork
+
+```bash
+git clone https://github.com/<YOUR_GITHUB_USERNAME>/mozeidon.git
+cd mozeidon
+```
+
+Replace `<YOUR_GITHUB_USERNAME>` with your own GitHub username.
+
+## 6. Start the patched Raycast extension locally
+
+The Raycast extension lives in the `raycast/` subdirectory.
+
+```bash
+cd raycast
+npm install
+npm run dev
+```
+
+What happens next:
+
+- Raycast opens the extension in development mode
+- the extension shows up near the top of Raycast search while dev mode is running
+- changes hot-reload while `npm run dev` is active
+
+## 7. Import the extension into Raycast, then stop dev mode
+
+Once the extension has opened successfully in Raycast:
+
+- test that it launches correctly
+- then press `Ctrl-C` in the terminal running `npm run dev`
+
+After you stop dev mode:
+
+- the extension remains installed in Raycast
+- it no longer stays pinned to the top as a development command
+- you can still find it by searching for `Mozeidon`
+
+Run `npm run dev` again any time you want to edit or debug the extension.
+
+## 8. Configure the Raycast extension preferences
+
+Open Raycast preferences for the local Mozeidon extension and set:
+
+### Mozeidon CLI filepath
+
+```text
+/opt/homebrew/bin/mozeidon
+```
+
+If your `mozeidon` binary is elsewhere, use:
+
+```bash
+command -v mozeidon
+```
+
+### Browser open command
+
+Use:
+
+```text
+open -b app.zen-browser.zen
+```
+
+This is more robust than `open -a firefox` and is the recommended setting for Zen.
+
+## 9. Verify the patched extension
+
+Open Raycast and run the `Mozeidon` command.
+
+Expected result:
+
+- the Raycast window stays open
+- open tabs load from Zen
+- recently closed tabs load
+- bookmarks load
+- switching to a selected tab focuses Zen correctly
+
+## Updating this fork
+
+This fork is intentionally small so it can stay close to upstream.
+
+A simple update flow is:
+
+```bash
+git remote add upstream https://github.com/egovelox/mozeidon.git
+git fetch upstream
+git checkout main
+git rebase upstream/main
+```
+
+Then re-apply or keep this Raycast patch if upstream has not yet merged an equivalent Zen fix.
+
+## Notes
+
+### Functional patch vs cosmetic patch
+
+The **functional** fix is in:
+
+- `raycast/src/actions/index.ts`
+
+There are also a few **cosmetic** Firefox-specific strings upstream in:
+
+- `raycast/package.json`
+
+Those labels do not stop the extension from working, but you may want to rename them in your fork for clarity. Examples:
+
+- `Firefox command` → `Browser command` or `Zen command`
+- `Mozilla Firefox add-on` → `Zen / Firefox add-on`
+- `Search and switch to Firefox opened tabs...` → `Search and switch to Zen opened tabs...`
+
+### Why keep this as a fork?
+
+Keeping this in a fork makes the setup repeatable:
+
+- you can reinstall it on a new machine quickly
+- you keep a permanent copy of the patch
+- you can rebase onto upstream instead of rebuilding the fix from memory
+
+## Upstream project
+
+- Upstream repository: https://github.com/egovelox/mozeidon
+- Native app: https://github.com/egovelox/mozeidon-native-app
+- Raycast Store entry: https://www.raycast.com/egovelox/mozeidon
+- CLI reference in this repo: `CLI_REFERENCE.md`
+
+## Zen Browser
+
+- Zen Browser: https://zen-browser.app/, https://github.com/zen-browser/desktop
+- Zen Browser bundle ID: `app.zen-browser.zen`
+
+## License
+
+This repository follows the upstream project license unless noted otherwise.
+
+The Zen logo's and icons are all licensed under CC BY-NC-SA 4.0; https://github.com/zen-browser/branding-archive
+
+# Original Mozeidon readme content:
 
 TLDR;
 - Handle your tabs, groups, bookmarks and history from outside of your web-browsers.

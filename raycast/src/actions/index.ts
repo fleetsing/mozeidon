@@ -102,24 +102,22 @@ export function openFirefoxAtMozeidonPage() {
 export async function startFirefox() {
   await runAppleScript(`
 try
-tell application "Firefox" to activate
+  tell application id "app.zen-browser.zen" to activate
 end try
 `);
 }
 
 export async function isFirefoxRunning() {
   const isFirefoxRunning = await runAppleScript(`
-set isRunning to false
 try
-  tell application "System Events"
-    if (get name of every application process) contains "Firefox" then
-      set isRunning to true
-    end if
-  end tell
+  if application id "app.zen-browser.zen" is running then
+    return true
+  else
+    return false
+  end if
+on error
+  return false
 end try
-return isRunning`);
-  if (isFirefoxRunning === "false") {
-    return false;
-  }
-  return true;
+`);
+  return isFirefoxRunning !== "false";
 }

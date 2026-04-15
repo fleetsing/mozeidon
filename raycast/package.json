@@ -2,8 +2,8 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "mozeidon",
   "title": "Mozeidon",
-  "description": "Search, open tabs and bookmarks in Firefox via Mozeidon add-on",
-  "icon": "firefox-logo.png",
+  "description": "Search, open tabs and bookmarks in Zen Browser via Mozeidon",
+  "icon": "zen-logo.png",
   "author": "egovelox",
   "contributors": [],
   "categories": [
@@ -19,24 +19,24 @@
       "required": false,
       "title": "Mozeidon CLI filepath",
       "default": "/opt/homebrew/bin/mozeidon",
-      "description": "The filepath of mozeidon CLI binary",
-      "placeholder": "e.g /opt/homebrew/bin/mozeidon"
+      "description": "The filepath of the Mozeidon CLI binary",
+      "placeholder": "e.g. /opt/homebrew/bin/mozeidon"
     },
     {
       "name": "firefox",
       "type": "textfield",
       "required": false,
-      "title": "Firefox command",
-      "default": "open -a firefox",
-      "description": "An optional shell command to customize how Firefox",
-      "placeholder": "e.g open -a firefox"
+      "title": "Browser command",
+      "default": "open -b app.zen-browser.zen",
+      "description": "Optional shell command used to open Zen Browser",
+      "placeholder": "e.g. open -b app.zen-browser.zen"
     },
     {
       "name": "searchEngine",
       "type": "dropdown",
       "required": false,
       "title": "Search Engine",
-      "description": "Search Engine for query (default: Google).",
+      "description": "Search engine for queries opened from Raycast.",
       "default": "Google",
       "data": [
         {
@@ -66,8 +66,8 @@
     {
       "name": "mozeidon",
       "title": "Mozeidon",
-      "subtitle": "Mozilla Firefox add-on",
-      "description": "Search and switch to Firefox opened tabs, recently-closed, bookmarks, etc",
+      "subtitle": "Zen Browser add-on",
+      "description": "Search and switch to Zen tabs, recently closed tabs, bookmarks, etc",
       "mode": "view"
     }
   ],
