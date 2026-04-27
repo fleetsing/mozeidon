@@ -1,9 +1,11 @@
 import { getPreferenceValues } from "@raycast/api";
+import type { Preferences } from "./interfaces";
 
-const preferences = getPreferenceValues();
+const preferences = getPreferenceValues<Preferences>();
 
 export const COMMAND_NAME = "Mozeidon";
 export const MOZEIDON = preferences.mozeidon;
+export const PROFILE_ID = preferences.profileId?.trim() || undefined;
 export const SEARCH_ENGINE = preferences.searchEngine;
 
 // Kept as-is to avoid touching more files.

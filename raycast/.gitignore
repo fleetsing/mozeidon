@@ -6,3 +6,4 @@
 # misc
 .DS_Store
 raycast-env.d.ts
+.test-dist

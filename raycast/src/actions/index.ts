@@ -1,93 +1,61 @@
-import * as readline from "node:readline";
 import { runAppleScript } from "@raycast/utils";
-import { MozeidonBookmark, MozeidonTab, Tab, TabState } from "../interfaces";
-import { execSync, spawn } from "child_process";
+import type { MozeidonBookmark, MozeidonTab, Tab, TabState } from "../interfaces";
+import { execSync } from "child_process";
 import {
   FIREFOX_OPEN_COMMAND,
   MOZEIDON,
   MOZEIDON_DOCUMENTATION_URL,
+  PROFILE_ID,
   SEARCH_ENGINE,
   SEARCH_ENGINES,
   TABS_FALLBACK,
   TAB_TYPE,
 } from "../constants";
+import {
+  buildNewTabArgs,
+  parseMozeidonJson,
+  runMozeidon,
+  runMozeidonJson,
+  streamMozeidonLines,
+} from "../mozeidonClient";
+import { mapMozeidonBookmarksToTabs, mapMozeidonTabsToState } from "../tabMappers";
 
 export function openNewTab(queryText: string | null | undefined): void {
-  // default empty query for empty tab
-  let query = "";
-
-  if (queryText) {
-    try {
-      query = ` -- "${new URL(queryText).toString()}"`;
-
-      // not a valid url, then it should open a search-engine request
-    } catch (_) {
-      const encodedQuery = encodeURIComponent(queryText);
-      query = ` -- "${SEARCH_ENGINES[SEARCH_ENGINE]}${encodedQuery}"`;
-    }
-  }
-
-  execSync(`${MOZEIDON} tabs new${query}`);
+  runMozeidon(buildNewTabArgs(queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
   openFirefox();
 }
 
 export function switchTab(tab: Tab): void {
-  execSync(`${MOZEIDON} tabs switch ${tab.windowId}:${tab.id}`);
+  runMozeidon(["tabs", "switch", `${tab.windowId}:${tab.id}`], getMozeidonOptions());
   openFirefox();
 }
 
 export function closeTab(tab: Tab): void {
-  execSync(`${MOZEIDON} tabs close ${tab.windowId}:${tab.id}`);
+  runMozeidon(["tabs", "close", `${tab.windowId}:${tab.id}`], getMozeidonOptions());
 }
 
 export function fetchOpenTabs(): TabState {
-  const data = execSync(`${MOZEIDON} tabs get`);
-  const parsedTabs: { data: MozeidonTab[] } = JSON.parse(data.toString() || TABS_FALLBACK);
-  return {
-    type: TAB_TYPE.OPENED_TABS,
-    tabs: parsedTabs.data.map(
-      (mozTab) =>
-        new Tab(
-          mozTab.id.toString(),
-          mozTab.pinned,
-          mozTab.windowId,
-          mozTab.title,
-          mozTab.url,
-          mozTab.domain,
-          mozTab.active,
-        ),
-    ),
-  };
+  const parsedTabs = runMozeidonJson<{ data: MozeidonTab[] }>(["tabs", "get"], {
+    ...getMozeidonOptions(),
+    context: "tabs get",
+    fallback: TABS_FALLBACK,
+  });
+  return mapMozeidonTabsToState(parsedTabs, TAB_TYPE.OPENED_TABS);
 }
 
 export function fetchRecentlyClosedTabs(): TabState {
-  const data = execSync(`${MOZEIDON} tabs get --closed`);
-  const parsedTabs: { data: MozeidonTab[] } = JSON.parse(data.toString() || TABS_FALLBACK);
-  return {
-    type: TAB_TYPE.RECENTLY_CLOSED,
-    tabs: parsedTabs.data.map(
-      (mozTab) =>
-        new Tab(
-          mozTab.id.toString(),
-          mozTab.pinned,
-          mozTab.windowId,
-          mozTab.title,
-          mozTab.url,
-          mozTab.domain,
-          mozTab.active,
-        ),
-    ),
-  };
+  const parsedTabs = runMozeidonJson<{ data: MozeidonTab[] }>(["tabs", "get", "--closed"], {
+    ...getMozeidonOptions(),
+    context: "tabs get --closed",
+    fallback: TABS_FALLBACK,
+  });
+  return mapMozeidonTabsToState(parsedTabs, TAB_TYPE.RECENTLY_CLOSED);
 }
 
 export async function* getBookmarksChunks() {
-  const command = spawn(`${MOZEIDON} bookmarks -c 1000`, { shell: true });
-  const chunks = readline.createInterface({ input: command.stdout });
-  for await (const chunk of chunks) {
-    const { data: parsedBookmarks }: { data: MozeidonBookmark[] } = JSON.parse(chunk);
-    yield parsedBookmarks.map(
-      (mozBookmark) => new Tab(mozBookmark.id, false, 0, mozBookmark.title, mozBookmark.url, mozBookmark.parent, false),
-    );
+  for await (const chunk of streamMozeidonLines(["bookmarks", "-c", "1000"], getMozeidonOptions())) {
+    const { data: parsedBookmarks } = parseMozeidonJson<{ data: MozeidonBookmark[] }>(chunk, "bookmarks -c 1000");
+    yield mapMozeidonBookmarksToTabs(parsedBookmarks);
   }
 }
 
@@ -120,4 +88,11 @@ on error
 end try
 `);
   return isFirefoxRunning !== "false";
+}
+
+function getMozeidonOptions() {
+  return {
+    executable: MOZEIDON,
+    profileId: PROFILE_ID,
+  };
 }
