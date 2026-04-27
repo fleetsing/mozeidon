@@ -6,7 +6,7 @@ Create a small typed Mozeidon CLI wrapper for the Raycast extension that invokes
 
 ## Status
 
-- Proposed
+- Implemented
 
 ## Milestone
 
