@@ -31,6 +31,47 @@ test("buildMozeidonArgs inserts profile id as separate arguments", () => {
   ]);
 });
 
+test("buildMozeidonArgs applies profile support to representative commands", () => {
+  const cases: Array<{ command: string[]; expected: string[] }> = [
+    {
+      command: ["tabs", "get"],
+      expected: ["--profile-id", "Zen", "tabs", "get"],
+    },
+    {
+      command: ["tabs", "get", "--closed"],
+      expected: ["--profile-id", "Zen", "tabs", "get", "--closed"],
+    },
+    {
+      command: ["bookmarks", "-c", "1000"],
+      expected: ["--profile-id", "Zen", "bookmarks", "-c", "1000"],
+    },
+    {
+      command: ["tabs", "switch", "456:123"],
+      expected: ["--profile-id", "Zen", "tabs", "switch", "456:123"],
+    },
+    {
+      command: ["tabs", "close", "456:123"],
+      expected: ["--profile-id", "Zen", "tabs", "close", "456:123"],
+    },
+    {
+      command: ["tabs", "new"],
+      expected: ["--profile-id", "Zen", "tabs", "new"],
+    },
+    {
+      command: ["tabs", "new", "--", "https://example.com/page"],
+      expected: ["--profile-id", "Zen", "tabs", "new", "--", "https://example.com/page"],
+    },
+    {
+      command: ["tabs", "new", "--", "https://google.com/search?q=hello%20zen"],
+      expected: ["--profile-id", "Zen", "tabs", "new", "--", "https://google.com/search?q=hello%20zen"],
+    },
+  ];
+
+  for (const testCase of cases) {
+    assert.deepEqual(buildMozeidonArgs(testCase.command, { profileId: "Zen" }), testCase.expected);
+  }
+});
+
 test("buildNewTabArgs handles empty, URL, and search queries", () => {
   assert.deepEqual(buildNewTabArgs(undefined, "https://google.com/search?q="), ["tabs", "new"]);
   assert.deepEqual(buildNewTabArgs("", "https://google.com/search?q="), ["tabs", "new"]);
