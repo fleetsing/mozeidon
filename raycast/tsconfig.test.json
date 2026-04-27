@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/mozeidonClient.ts", "tests/**/*.ts"],
+  "compilerOptions": {
+    "outDir": ".test-dist",
+    "rootDir": ".",
+    "noEmit": false,
+    "sourceMap": false
+  }
+}

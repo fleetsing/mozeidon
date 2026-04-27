@@ -1,10 +1,11 @@
-import { Image } from "@raycast/api";
-import { getFavicon } from "@raycast/utils";
-import { ReactNode } from "react";
-import { TAB_TYPE } from "../constants";
+import type { ReactNode } from "react";
+import type { TAB_TYPE } from "../constants";
 
 export interface Preferences {
+  readonly mozeidon: string;
+  readonly firefox: string;
   readonly searchEngine: string;
+  readonly profileId?: string;
 }
 
 export class Tab {
@@ -20,10 +21,6 @@ export class Tab {
 
   urlWithoutScheme(): string {
     return this.url.replace(/(^\w+:|^)\/\//, "").replace("www.", "");
-  }
-
-  googleFavicon(): Image.ImageLike {
-    return getFavicon(this.url, { mask: Image.Mask.RoundedRectangle });
   }
 }
 

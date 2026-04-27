@@ -32,6 +32,14 @@
       "placeholder": "e.g. open -b app.zen-browser.zen"
     },
     {
+      "name": "profileId",
+      "type": "textfield",
+      "required": false,
+      "title": "Mozeidon Profile ID or Alias",
+      "description": "Optional Mozeidon profile id or alias to use for Zen Browser commands.",
+      "placeholder": "e.g. Zen"
+    },
+    {
       "name": "searchEngine",
       "type": "dropdown",
       "required": false,
@@ -88,6 +96,7 @@
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js",
     "publish": "ray publish"
   }
 }

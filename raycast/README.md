@@ -10,6 +10,9 @@ New Tab search can be configured to search from the following sources:
 - Brave
 - Baidu
 
+If multiple Mozeidon profiles are available, the optional `Mozeidon Profile ID or Alias` preference can target Zen
+commands at a specific profile. Leaving it empty preserves Mozeidon's default profile selection.
+
 This raycast extension cannot work without prior installation of :
 
 - Mozeidon firefox add-on, see [Mozeidon firefox-addon](https://addons.mozilla.org/en-US/firefox/addon/mozeidon/)

@@ -1,4 +1,5 @@
-import { Icon, List } from "@raycast/api";
+import { Icon, Image, List } from "@raycast/api";
+import { getFavicon } from "@raycast/utils";
 import { TabActions } from "./index";
 import { Tab } from "../interfaces";
 import { SEARCH_ENGINE, TAB_TYPE } from "../constants";
@@ -34,7 +35,7 @@ function TabItem({ isLoading, type, tab, onCloseTab }: TabItemProps) {
       subtitle={`${(tab.pinned ? "📌 " : "") + tab.domain}`}
       keywords={[tab.domain, tab.urlWithoutScheme()]}
       actions={<TabActions.OpenTabListItem tab={tab} type={type} isLoading={isLoading} onCloseTab={onCloseTab} />}
-      icon={tab.googleFavicon()}
+      icon={getFavicon(tab.url, { mask: Image.Mask.RoundedRectangle })}
     />
   );
 }
