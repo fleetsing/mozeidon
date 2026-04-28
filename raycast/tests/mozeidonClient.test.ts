@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { ChildProcessWithoutNullStreams, ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import type { TAB_TYPE } from "../src/constants";
+import { TAB_TYPE } from "../src/tabTypes";
 import {
   MozeidonClientError,
   buildMozeidonArgs,
@@ -14,12 +14,25 @@ import {
   streamMozeidonLines,
 } from "../src/mozeidonClient";
 import {
+  buildDuplicateTabArgs,
+  buildLastTabIndexByWindow,
+  buildMoveTabToEndArgs,
+  buildMoveTabToGroupArgs,
+  buildMoveTabToStartArgs,
+  buildPinTabArgs,
+  buildUngroupTabArgs,
+  buildUnpinTabArgs,
+  getAvailableTabActionIds,
+  getMoveToGroupTargets,
+} from "../src/tabActionCommands";
+import {
   hasGroupMetadata,
   mapMozeidonBookmarksToTabs,
   mapMozeidonTabsToState,
   sortTabsByLastAccessed,
 } from "../src/tabMappers";
 import { buildTabKeywords, buildTabMetadata, getDistinctWindowCount } from "../src/tabMetadata";
+import { Tab } from "../src/interfaces";
 
 test("buildMozeidonArgs preserves default profile behavior", () => {
   assert.deepEqual(buildMozeidonArgs(["tabs", "get"]), ["tabs", "get"]);
@@ -75,11 +88,114 @@ test("buildMozeidonArgs applies profile support to representative commands", () 
       command: ["tabs", "new", "--", "https://google.com/search?q=hello%20zen"],
       expected: ["--profile-id", "Zen", "tabs", "new", "--", "https://google.com/search?q=hello%20zen"],
     },
+    {
+      command: ["tabs", "update", "--tab-id", "123", "--window-id", "456", "--pin=true"],
+      expected: ["--profile-id", "Zen", "tabs", "update", "--tab-id", "123", "--window-id", "456", "--pin=true"],
+    },
+    {
+      command: ["tabs", "duplicate", "--tab-id", "123", "--window-id", "456"],
+      expected: ["--profile-id", "Zen", "tabs", "duplicate", "--tab-id", "123", "--window-id", "456"],
+    },
+    {
+      command: ["tabs", "update", "--tab-id", "123", "--window-id", "456", "--group-id", "789"],
+      expected: ["--profile-id", "Zen", "tabs", "update", "--tab-id", "123", "--window-id", "456", "--group-id", "789"],
+    },
   ];
 
   for (const testCase of cases) {
     assert.deepEqual(buildMozeidonArgs(testCase.command, { profileId: "Zen" }), testCase.expected);
   }
+});
+
+test("tab action argument builders use current CLI command shapes", () => {
+  const tab = createTab({ id: "123", windowId: 456 });
+
+  assert.deepEqual(buildPinTabArgs(tab), ["tabs", "update", "--tab-id", "123", "--window-id", "456", "--pin=true"]);
+  assert.deepEqual(buildUnpinTabArgs(tab), ["tabs", "update", "--tab-id", "123", "--window-id", "456", "--pin=false"]);
+  assert.deepEqual(buildDuplicateTabArgs(tab), ["tabs", "duplicate", "--tab-id", "123", "--window-id", "456"]);
+  assert.deepEqual(buildMoveTabToStartArgs(tab), [
+    "tabs",
+    "update",
+    "--tab-id",
+    "123",
+    "--window-id",
+    "456",
+    "--tab-index",
+    "0",
+  ]);
+  assert.deepEqual(buildMoveTabToEndArgs(tab), [
+    "tabs",
+    "update",
+    "--tab-id",
+    "123",
+    "--window-id",
+    "456",
+    "--tab-index",
+    "-1",
+  ]);
+  assert.deepEqual(buildMoveTabToGroupArgs(tab, 789), [
+    "tabs",
+    "update",
+    "--tab-id",
+    "123",
+    "--window-id",
+    "456",
+    "--group-id",
+    "789",
+  ]);
+  assert.deepEqual(buildUngroupTabArgs(tab), [
+    "tabs",
+    "update",
+    "--tab-id",
+    "123",
+    "--window-id",
+    "456",
+    "--group-id",
+    "-1",
+  ]);
+});
+
+test("tab action availability is limited to opened tabs and current tab state", () => {
+  const unpinnedTab = createTab({ pinned: false, index: 1 });
+  const pinnedTab = createTab({ pinned: true, index: 1 });
+  const firstTab = createTab({ pinned: false, index: 0 });
+  const lastTab = createTab({ id: "124", pinned: false, index: 2 });
+  const groupedTab = createTab({ groupId: 789, group: { id: 789, windowId: 456, title: "Work" } });
+  const groups = [
+    { id: 789, windowId: 456, title: "Work" },
+    { id: 999, windowId: 456, title: "Personal" },
+    { id: 111, windowId: 999, title: "Other Window" },
+  ];
+
+  const lastTabIndexByWindow = buildLastTabIndexByWindow([unpinnedTab, lastTab]);
+
+  assert.deepEqual(getAvailableTabActionIds(TAB_TYPE.RECENTLY_CLOSED, unpinnedTab, groups), []);
+  assert.deepEqual(getAvailableTabActionIds(TAB_TYPE.BOOKMARKS, unpinnedTab, groups), []);
+  assert.ok(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, []).includes("pin"));
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, []).includes("unpin"), false);
+  assert.ok(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, pinnedTab, []).includes("unpin"));
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, pinnedTab, []).includes("pin"), false);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, firstTab, []).includes("moveToStart"), false);
+  assert.equal(
+    getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, lastTab, groups, lastTabIndexByWindow).includes("moveToEnd"),
+    false,
+  );
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, []).includes("moveToGroup"), false);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, groups).includes("moveToGroup"), true);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, groups).includes("ungroup"), false);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, groupedTab, groups).includes("ungroup"), true);
+  assert.deepEqual(getMoveToGroupTargets(groupedTab, groups), [{ id: 999, windowId: 456, title: "Personal" }]);
+});
+
+test("buildLastTabIndexByWindow precomputes reliable last indexes by window", () => {
+  const tabs = [
+    createTab({ id: "1", windowId: 456, index: 0 }),
+    createTab({ id: "2", windowId: 456, index: 3 }),
+    createTab({ id: "3", windowId: 999, index: 2 }),
+    createTab({ id: "4", windowId: 999 }),
+  ];
+
+  assert.deepEqual([...buildLastTabIndexByWindow(tabs).entries()], [[456, 3]]);
 });
 
 test("buildNewTabArgs handles empty, URL, and search queries", () => {
@@ -568,4 +684,20 @@ function createFakeProcess(): ChildProcessWithoutNullStreams {
   process.stderr = new PassThrough();
   process.stdin = new PassThrough();
   return process as unknown as ChildProcessWithoutNullStreams;
+}
+
+function createTab(overrides: Partial<Tab> = {}): Tab {
+  return new Tab(
+    overrides.id ?? "123",
+    overrides.pinned ?? false,
+    overrides.windowId ?? 456,
+    overrides.title ?? "Example",
+    overrides.url ?? "https://example.com",
+    overrides.domain ?? "example.com",
+    overrides.active ?? false,
+    overrides.groupId,
+    overrides.group,
+    overrides.index,
+    overrides.lastAccessed,
+  );
 }

@@ -15,7 +15,8 @@ export function mapMozeidonTabsToState(
   type: TAB_TYPE,
   options: MapMozeidonTabsOptions = {},
 ): TabState {
-  const groupsById = indexGroupsById(parsedTabs.groups);
+  const groups = mapMozeidonGroupsToTabGroups(parsedTabs.groups);
+  const groupsById = indexGroupsById(groups);
   const tabs = parsedTabs.data.map(
     (mozTab) =>
       new Tab(
@@ -36,6 +37,7 @@ export function mapMozeidonTabsToState(
   return {
     type,
     tabs: options.sortByLastAccessed ? sortTabsByLastAccessed(tabs) : tabs,
+    groups,
   };
 }
 
@@ -49,6 +51,19 @@ export function hasGroupMetadata(payload: MozeidonTabsPayload): boolean {
   return Array.isArray(payload.groups);
 }
 
+export function mapMozeidonGroupsToTabGroups(groups: MozeidonGroup[] | undefined): TabGroup[] | undefined {
+  if (!groups) return undefined;
+
+  return groups
+    .filter((group) => Number.isFinite(group.id) && group.id > 0 && Number.isFinite(group.windowId))
+    .map((group) => ({
+      id: group.id,
+      windowId: group.windowId,
+      title: group.title,
+      color: group.color,
+    }));
+}
+
 export function sortTabsByLastAccessed(tabs: Tab[]): Tab[] {
   return [...tabs].sort((firstTab, secondTab) => {
     if (firstTab.lastAccessed && secondTab.lastAccessed) return secondTab.lastAccessed - firstTab.lastAccessed;
@@ -58,18 +73,8 @@ export function sortTabsByLastAccessed(tabs: Tab[]): Tab[] {
   });
 }
 
-function indexGroupsById(groups: MozeidonGroup[] | undefined): Map<number, TabGroup> {
-  return new Map(
-    (groups ?? []).map((group) => [
-      group.id,
-      {
-        id: group.id,
-        windowId: group.windowId,
-        title: group.title,
-        color: group.color,
-      },
-    ]),
-  );
+function indexGroupsById(groups: TabGroup[] | undefined): Map<number, TabGroup> {
+  return new Map((groups ?? []).map((group) => [group.id, group]));
 }
 
 function getGroupForTab(tab: MozeidonTab, groupsById: Map<number, TabGroup>): TabGroup | null {

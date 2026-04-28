@@ -1,7 +1,7 @@
 import { Icon, Image, List } from "@raycast/api";
 import { getFavicon } from "@raycast/utils";
 import { TabActions } from "./index";
-import { Tab } from "../interfaces";
+import { Tab, TabGroup } from "../interfaces";
 import { SEARCH_ENGINE, TAB_TYPE } from "../constants";
 import { buildTabKeywords, buildTabMetadata } from "../tabMetadata";
 
@@ -12,6 +12,9 @@ type TabItemProps = {
   tab: Tab;
   windowCount: number;
   onCloseTab: (() => void) | undefined;
+  groups: TabGroup[];
+  lastTabIndexByWindow: Map<number, number>;
+  onRefreshOpenTabs: (() => Promise<void>) | undefined;
 };
 
 export class TabList {
@@ -29,7 +32,16 @@ function NewTabItem({ searchText }: NewTabItemProps) {
   );
 }
 
-function TabItem({ isLoading, type, tab, windowCount, onCloseTab }: TabItemProps) {
+function TabItem({
+  isLoading,
+  type,
+  tab,
+  windowCount,
+  onCloseTab,
+  groups,
+  lastTabIndexByWindow,
+  onRefreshOpenTabs,
+}: TabItemProps) {
   const metadata = buildTabMetadata(tab, type === TAB_TYPE.OPENED_TABS ? windowCount : 1);
   const accessories = [
     metadata.isPinned ? { icon: Icon.Pin, tooltip: "Pinned" } : undefined,
@@ -51,7 +63,17 @@ function TabItem({ isLoading, type, tab, windowCount, onCloseTab }: TabItemProps
         type === TAB_TYPE.OPENED_TABS ? buildTabKeywords(tab, windowCount) : [tab.domain, tab.urlWithoutScheme()]
       }
       accessories={accessories}
-      actions={<TabActions.OpenTabListItem tab={tab} type={type} isLoading={isLoading} onCloseTab={onCloseTab} />}
+      actions={
+        <TabActions.OpenTabListItem
+          tab={tab}
+          type={type}
+          isLoading={isLoading}
+          onCloseTab={onCloseTab}
+          groups={groups}
+          lastTabIndexByWindow={lastTabIndexByWindow}
+          onRefreshOpenTabs={onRefreshOpenTabs}
+        />
+      }
       icon={getFavicon(tab.url, { mask: Image.Mask.RoundedRectangle })}
     />
   );
