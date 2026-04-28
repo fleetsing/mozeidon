@@ -670,3 +670,4 @@ Decisions:
 - 2026-04-28: Fixed V1 add-on extraction to honor global `maxBytes` for extracted content, skip malformed page-derived link/image URLs without aborting extraction, and warn that Markdown is plain-text-derived until richer conversion ships.
 - 2026-04-28: Fixed add-on profile registration reuse so temporary add-on reconnects do not rotate `profileId` on every native-app reconnect.
 - 2026-04-28: Updated V1 semantics from manual 7.2 verification: tab metadata fallback is explicitly marked as non-DOM, permission-denied selection/metadata/links are unavailable instead of empty successful reads, and permission fields distinguish tab metadata from DOM access.
+- 2026-04-28: Addressed PR review gaps in the add-on extraction path: malformed context requests now return stable structured errors, selectors are rejected outside `context active`, metadata item/JSON-LD caps report truncation, and string truncation no longer uses quadratic byte checks.

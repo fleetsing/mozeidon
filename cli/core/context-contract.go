@@ -602,7 +602,7 @@ func ContextUsageError(mode ContextMode, format string, capturedAt time.Time) Ze
 
 func contextExitCode(code string) int {
 	switch code {
-	case "invalid_format", "selector_invalid", "selector_unsupported", "html_sanitizer_missing":
+	case "invalid_format", "invalid_context_request", "selector_invalid", "selector_unsupported", "html_sanitizer_missing":
 		return 2
 	case "permission_denied", "unsupported_page":
 		return 3

@@ -411,6 +411,15 @@ func TestNewContextErrorUsesStructuredJSONContract(t *testing.T) {
 	}
 }
 
+func TestContextExitCodeClassifiesRequestErrors(t *testing.T) {
+	if got := contextExitCode("invalid_context_request"); got != 2 {
+		t.Fatalf("expected invalid_context_request to use usage exit code 2, got %d", got)
+	}
+	if got := contextExitCode("selector_unsupported"); got != 2 {
+		t.Fatalf("expected selector_unsupported to use usage exit code 2, got %d", got)
+	}
+}
+
 func TestParseContextFormat(t *testing.T) {
 	tests := map[string]ContextFormat{
 		"":         ContextFormatJSON,

@@ -27,6 +27,16 @@ type ContextRequest = {
   limits: ContextLimits
 }
 
+type ContextRequestParseResult =
+  | { request: ContextRequest }
+  | {
+      error: {
+        code: string
+        message: string
+        details?: Record<string, unknown>
+      }
+    }
+
 type ContextWarning = {
   code: string
   message: string
@@ -72,7 +82,36 @@ const DEFAULT_LIMITS: ContextLimits = {
 
 export async function getContext(port: Port, { args }: Command) {
   try {
-    const request = parseContextRequest(args)
+    const parsedRequest = parseContextRequest(args)
+    if ("error" in parsedRequest) {
+      port.postMessage(
+        Response.data(
+          contextError(
+            parsedRequest.error.code,
+            parsedRequest.error.message,
+            parsedRequest.error.details
+          )
+        )
+      )
+      await delay(5)
+      return port.postMessage(Response.end())
+    }
+
+    const request = parsedRequest.request
+    if (request.selector && request.mode !== "active") {
+      port.postMessage(
+        Response.data(
+          contextError(
+            "selector_unsupported",
+            "Selector extraction is only supported for active page context.",
+            { selector: request.selector, mode: request.mode }
+          )
+        )
+      )
+      await delay(5)
+      return port.postMessage(Response.end())
+    }
+
     const activeTab = await getActiveTab()
     if (!activeTab || activeTab.id === undefined) {
       port.postMessage(
@@ -148,15 +187,49 @@ export async function getContext(port: Port, { args }: Command) {
   }
 }
 
-function parseContextRequest(args?: string): ContextRequest {
-  const parsed = args ? JSON.parse(args) : {}
-  const mode = parseMode(parsed.mode)
-  const format = parseFormat(parsed.format)
+function parseContextRequest(args?: string): ContextRequestParseResult {
+  let parsed: unknown
+  try {
+    parsed = args ? JSON.parse(args) : {}
+  } catch (_) {
+    return {
+      error: {
+        code: "invalid_context_request",
+        message: "Context request args must be valid JSON.",
+        details: { args },
+      },
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {
+      error: {
+        code: "invalid_context_request",
+        message: "Context request args must be a JSON object.",
+        details: {
+          receivedType: Array.isArray(parsed) ? "array" : typeof parsed,
+        },
+      },
+    }
+  }
+
+  const request = parsed as Record<string, unknown>
+  const mode = parseMode(request.mode)
+  const format = parseFormat(request.format)
+  const limits =
+    request.limits &&
+    typeof request.limits === "object" &&
+    !Array.isArray(request.limits)
+      ? request.limits
+      : {}
   return {
-    mode,
-    format,
-    selector: typeof parsed.selector === "string" ? parsed.selector : undefined,
-    limits: { ...DEFAULT_LIMITS, ...(parsed.limits ?? {}) },
+    request: {
+      mode,
+      format,
+      selector:
+        typeof request.selector === "string" ? request.selector : undefined,
+      limits: { ...DEFAULT_LIMITS, ...limits },
+    },
   }
 }
 
@@ -491,7 +564,12 @@ function domainFromUrl(rawUrl?: string) {
 
 function truncationFromWarnings(warnings: ContextWarning[]): Truncation {
   const fields = warnings
-    .filter((warning) => warning.code === "content_truncated" && warning.field)
+    .filter(
+      (warning) =>
+        (warning.code === "content_truncated" ||
+          warning.code === "metadata_truncated") &&
+        warning.field
+    )
     .map((warning) => warning.field!)
   return { truncated: fields.length > 0, fields }
 }
@@ -523,9 +601,12 @@ function truncate(
   }
 
   let output = ""
+  let currentBytes = 0
   for (const char of value) {
-    if (encoder.encode(output + char).length > maxBytes) break
+    const charBytes = encoder.encode(char).length
+    if (currentBytes + charBytes > maxBytes) break
     output += char
+    currentBytes += charBytes
   }
   warnings.push({
     code: "content_truncated",
@@ -566,12 +647,31 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
     }
 
     let output = ""
+    let currentBytes = 0
     for (const char of value) {
-      if (encoder.encode(output + char).length > maxBytes) break
+      const charBytes = encoder.encode(char).length
+      if (currentBytes + charBytes > maxBytes) break
       output += char
+      currentBytes += charBytes
     }
     addWarning("content_truncated", "Context content was truncated.", field)
     return { value: output, length: output.length, truncated: true }
+  }
+
+  function serializedByteLength(value: unknown) {
+    return new TextEncoder().encode(JSON.stringify(value)).length
+  }
+
+  function addMetadataTruncatedWarning(field: string, message: string) {
+    if (
+      warnings.some(
+        (warning) =>
+          warning.code === "metadata_truncated" && warning.field === field
+      )
+    ) {
+      return
+    }
+    addWarning("metadata_truncated", message, field)
   }
 
   function contentLimit(field: "text" | "markdown" | "html") {
@@ -744,6 +844,7 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
 
     const rawJsonLd: unknown[] = []
     const summary: Record<string, unknown>[] = []
+    let jsonLdTruncated = false
     document
       .querySelectorAll('script[type="application/ld+json"]')
       .forEach((script) => {
@@ -752,17 +853,25 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
         try {
           const parsed = JSON.parse(text)
           const values = Array.isArray(parsed) ? parsed : [parsed]
-          rawJsonLd.push(...values)
           values.forEach((value) => {
-            if (!value || typeof value !== "object") return
-            const item = value as Record<string, unknown>
-            summary.push({
-              type: item["@type"],
-              name: item.name,
-              headline: item.headline,
-              description: item.description,
-              url: item.url,
+            const nextSummary =
+              value && typeof value === "object"
+                ? jsonLdSummary(value as Record<string, unknown>)
+                : undefined
+            const candidateRaw = [...rawJsonLd, value]
+            const candidateSummary = nextSummary
+              ? [...summary, nextSummary]
+              : summary
+            const candidateBytes = serializedByteLength({
+              raw: candidateRaw,
+              summary: candidateSummary,
             })
+            if (candidateBytes > request.limits.maxJsonLdBytes) {
+              jsonLdTruncated = true
+              return
+            }
+            rawJsonLd.push(value)
+            if (nextSummary) summary.push(nextSummary)
           })
         } catch (_) {
           addWarning(
@@ -772,6 +881,12 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
           )
         }
       })
+    if (jsonLdTruncated) {
+      addMetadataTruncatedWarning(
+        "metadata.jsonLd",
+        "JSON-LD metadata was truncated to fit the configured size limit."
+      )
+    }
 
     const headings = Array.from(
       rootElement.querySelectorAll("h1, h2, h3, h4, h5, h6")
@@ -784,7 +899,14 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
       }))
       .filter((heading) => heading.text)
 
-    const links = Array.from(rootElement.querySelectorAll("a[href]"))
+    const linkElements = Array.from(rootElement.querySelectorAll("a[href]"))
+    if (linkElements.length > request.limits.maxLinks) {
+      addMetadataTruncatedWarning(
+        "metadata.links",
+        "Links were truncated to fit the configured item limit."
+      )
+    }
+    const links = linkElements
       .slice(0, request.limits.maxLinks)
       .flatMap((link) => {
         const href = safeURL(link.getAttribute("href"), "metadata.links")
@@ -801,7 +923,14 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
         ]
       })
 
-    const images = Array.from(rootElement.querySelectorAll("img[src]"))
+    const imageElements = Array.from(rootElement.querySelectorAll("img[src]"))
+    if (imageElements.length > request.limits.maxImages) {
+      addMetadataTruncatedWarning(
+        "metadata.images",
+        "Images were truncated to fit the configured item limit."
+      )
+    }
+    const images = imageElements
       .slice(0, request.limits.maxImages)
       .flatMap((image) => {
         const src = safeURL(image.getAttribute("src"), "metadata.images")
@@ -819,10 +948,20 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
 
     return {
       openGraph,
-      jsonLd: { raw: rawJsonLd, summary, truncated: false },
+      jsonLd: { raw: rawJsonLd, summary, truncated: jsonLdTruncated },
       headings,
       links,
       images,
+    }
+  }
+
+  function jsonLdSummary(item: Record<string, unknown>) {
+    return {
+      type: item["@type"],
+      name: item.name,
+      headline: item.headline,
+      description: item.description,
+      url: item.url,
     }
   }
 
