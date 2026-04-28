@@ -13,6 +13,7 @@ import (
 	"github.com/egovelox/mozeidon/cmd/history"
 	"github.com/egovelox/mozeidon/cmd/profiles"
 	"github.com/egovelox/mozeidon/cmd/tabs"
+	"github.com/egovelox/mozeidon/cmd/windows"
 )
 
 var rootCmd = &cobra.Command{
@@ -41,6 +42,7 @@ func init() {
 	rootCmd.AddCommand(history.HistoryCmd)
 	rootCmd.AddCommand(groups.GroupsCmd)
 	rootCmd.AddCommand(profiles.ProfilesCmd)
+	rootCmd.AddCommand(windows.WindowsCmd)
 }
 func Execute() {
 	err := rootCmd.Execute()
