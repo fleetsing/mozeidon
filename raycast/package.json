@@ -77,6 +77,13 @@
       "subtitle": "Zen Browser add-on",
       "description": "Search and switch to Zen tabs, recently closed tabs, bookmarks, etc",
       "mode": "view"
+    },
+    {
+      "name": "history",
+      "title": "Zen History",
+      "subtitle": "Zen Browser add-on",
+      "description": "Search and open Zen Browser history via Mozeidon",
+      "mode": "view"
     }
   ],
   "dependencies": {

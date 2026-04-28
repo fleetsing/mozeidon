@@ -1,5 +1,5 @@
 import { runAppleScript } from "@raycast/utils";
-import type { MozeidonBookmark, MozeidonGroup, MozeidonTab, Tab, TabState } from "../interfaces";
+import type { HistoryItem, MozeidonBookmark, MozeidonGroup, MozeidonTab, Tab, TabState } from "../interfaces";
 import { execSync } from "child_process";
 import {
   FIREFOX_OPEN_COMMAND,
@@ -35,6 +35,8 @@ import {
   buildUngroupTabArgs,
   buildUnpinTabArgs,
 } from "../tabActionCommands";
+import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../historyCommands";
+import { mapMozeidonHistoryItemsToHistoryItems, MozeidonHistoryPayload } from "../historyMappers";
 
 export function openNewTab(queryText: string | null | undefined): void {
   runMozeidon(buildNewTabArgs(queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
@@ -76,6 +78,19 @@ export function moveTabToGroup(tab: Tab, groupId: number): void {
 
 export function ungroupTab(tab: Tab): void {
   runMozeidon(buildUngroupTabArgs(tab), getMozeidonOptions());
+}
+
+export function fetchHistory(): HistoryItem[] {
+  const parsedHistory = runMozeidonJson<MozeidonHistoryPayload>(buildFetchHistoryArgs(), {
+    ...getMozeidonOptions(),
+    context: "history --max 500",
+    fallback: TABS_FALLBACK,
+  });
+  return mapMozeidonHistoryItemsToHistoryItems(parsedHistory.data);
+}
+
+export function deleteHistoryItem(item: Pick<HistoryItem, "url">): void {
+  runMozeidon(buildDeleteHistoryItemArgs(item), getMozeidonOptions());
 }
 
 export function fetchOpenTabs(): TabState {

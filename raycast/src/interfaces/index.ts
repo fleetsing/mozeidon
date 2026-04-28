@@ -56,6 +56,25 @@ export interface MozeidonBookmark {
   url: string;
 }
 
+export interface MozeidonHistoryItem {
+  id?: string;
+  url: string;
+  title?: string;
+  tc?: number;
+  vc?: number;
+  t?: number;
+}
+
+export interface HistoryItem {
+  id: string;
+  title: string;
+  url: string;
+  domain: string;
+  typedCount?: number;
+  visitCount?: number;
+  lastVisitTime?: number;
+}
+
 export interface TabState {
   type: TAB_TYPE;
   tabs: Tab[];
