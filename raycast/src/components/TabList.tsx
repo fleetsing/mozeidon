@@ -3,12 +3,14 @@ import { getFavicon } from "@raycast/utils";
 import { TabActions } from "./index";
 import { Tab } from "../interfaces";
 import { SEARCH_ENGINE, TAB_TYPE } from "../constants";
+import { buildTabKeywords, buildTabMetadata } from "../tabMetadata";
 
 type NewTabItemProps = { searchText?: string };
 type TabItemProps = {
   isLoading: boolean;
   type: TAB_TYPE;
   tab: Tab;
+  windowCount: number;
   onCloseTab: (() => void) | undefined;
 };
 
@@ -27,13 +29,28 @@ function NewTabItem({ searchText }: NewTabItemProps) {
   );
 }
 
-function TabItem({ isLoading, type, tab, onCloseTab }: TabItemProps) {
+function TabItem({ isLoading, type, tab, windowCount, onCloseTab }: TabItemProps) {
+  const metadata = buildTabMetadata(tab, type === TAB_TYPE.OPENED_TABS ? windowCount : 1);
+  const accessories = [
+    metadata.isPinned ? { icon: Icon.Pin, tooltip: "Pinned" } : undefined,
+    type === TAB_TYPE.OPENED_TABS && metadata.groupTitle
+      ? { tag: metadata.groupTitle, tooltip: "Tab Group" }
+      : undefined,
+    type === TAB_TYPE.OPENED_TABS && metadata.windowLabel
+      ? { text: metadata.windowLabel, tooltip: `Window ${tab.windowId}` }
+      : undefined,
+    type === TAB_TYPE.OPENED_TABS && metadata.isActive ? { tag: "Active", tooltip: "Active Tab" } : undefined,
+  ].filter((accessory): accessory is NonNullable<typeof accessory> => Boolean(accessory));
+
   return (
     <List.Item
       id={tab.id.toString()}
       title={tab.title}
-      subtitle={`${(tab.pinned ? "📌 " : "") + tab.domain}`}
-      keywords={[tab.domain, tab.urlWithoutScheme()]}
+      subtitle={tab.domain}
+      keywords={
+        type === TAB_TYPE.OPENED_TABS ? buildTabKeywords(tab, windowCount) : [tab.domain, tab.urlWithoutScheme()]
+      }
+      accessories={accessories}
       actions={<TabActions.OpenTabListItem tab={tab} type={type} isLoading={isLoading} onCloseTab={onCloseTab} />}
       icon={getFavicon(tab.url, { mask: Image.Mask.RoundedRectangle })}
     />

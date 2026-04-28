@@ -17,6 +17,10 @@ export class Tab {
     public readonly url: string,
     public readonly domain: string,
     public readonly active: boolean,
+    public readonly groupId?: number,
+    public readonly group: TabGroup | null = null,
+    public readonly index?: number,
+    public readonly lastAccessed?: number,
   ) {}
 
   urlWithoutScheme(): string {
@@ -27,11 +31,22 @@ export class Tab {
 export interface MozeidonTab {
   id: number;
   windowId: number;
+  groupId?: number;
   pinned: boolean;
   domain: string;
   title: string;
   url: string;
   active: boolean;
+  lastAccessed?: number;
+  index?: number;
+}
+
+export interface MozeidonGroup {
+  id: number;
+  windowId: number;
+  collapsed?: boolean;
+  color?: string;
+  title?: string;
 }
 
 export interface MozeidonBookmark {
@@ -44,6 +59,13 @@ export interface MozeidonBookmark {
 export interface TabState {
   type: TAB_TYPE;
   tabs: Tab[];
+}
+
+export interface TabGroup {
+  id: number;
+  windowId: number;
+  title?: string;
+  color?: string;
 }
 
 export interface SearchResult<T> {

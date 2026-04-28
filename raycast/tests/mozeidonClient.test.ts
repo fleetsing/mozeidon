@@ -13,7 +13,13 @@ import {
   spawnMozeidon,
   streamMozeidonLines,
 } from "../src/mozeidonClient";
-import { mapMozeidonBookmarksToTabs, mapMozeidonTabsToState } from "../src/tabMappers";
+import {
+  hasGroupMetadata,
+  mapMozeidonBookmarksToTabs,
+  mapMozeidonTabsToState,
+  sortTabsByLastAccessed,
+} from "../src/tabMappers";
+import { buildTabKeywords, buildTabMetadata, getDistinctWindowCount } from "../src/tabMetadata";
 
 test("buildMozeidonArgs preserves default profile behavior", () => {
   assert.deepEqual(buildMozeidonArgs(["tabs", "get"]), ["tabs", "get"]);
@@ -36,6 +42,10 @@ test("buildMozeidonArgs applies profile support to representative commands", () 
     {
       command: ["tabs", "get"],
       expected: ["--profile-id", "Zen", "tabs", "get"],
+    },
+    {
+      command: ["tabs", "get", "--with-groups"],
+      expected: ["--profile-id", "Zen", "tabs", "get", "--with-groups"],
     },
     {
       command: ["tabs", "get", "--closed"],
@@ -218,6 +228,314 @@ test("mapMozeidonTabsToState preserves current tab mapping behavior", () => {
   assert.equal(state.tabs[0].url, "https://example.com/page");
   assert.equal(state.tabs[0].domain, "example.com");
   assert.equal(state.tabs[0].active, true);
+});
+
+test("mapMozeidonTabsToState attaches rich group metadata when available", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          groupId: 789,
+          pinned: true,
+          domain: "example.com",
+          title: "Example Page",
+          url: "https://example.com/page",
+          active: true,
+          lastAccessed: 1710000000000,
+          index: 3,
+        },
+      ],
+      groups: [
+        {
+          id: 789,
+          windowId: 456,
+          collapsed: false,
+          color: "blue",
+          title: "Work",
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(state.tabs[0].groupId, 789);
+  assert.deepEqual(state.tabs[0].group, {
+    id: 789,
+    windowId: 456,
+    title: "Work",
+    color: "blue",
+  });
+  assert.equal(state.tabs[0].lastAccessed, 1710000000000);
+  assert.equal(state.tabs[0].index, 3);
+});
+
+test("mapMozeidonTabsToState preserves zero-based tab indexes", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          pinned: false,
+          domain: "example.com",
+          title: "First Tab",
+          url: "https://example.com",
+          active: false,
+          index: 0,
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(state.tabs[0].index, 0);
+});
+
+test("mapMozeidonTabsToState normalizes non-positive group ids", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          groupId: -1,
+          pinned: false,
+          domain: "example.com",
+          title: "Ungrouped",
+          url: "https://example.com",
+          active: false,
+        },
+      ],
+      groups: [
+        {
+          id: -1,
+          windowId: 456,
+          collapsed: false,
+          color: "grey",
+          title: "Invalid Sentinel",
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(state.tabs[0].groupId, undefined);
+  assert.equal(state.tabs[0].group, null);
+});
+
+test("mapMozeidonTabsToState handles missing or unknown group metadata", () => {
+  const missingGroupsState = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          groupId: 789,
+          pinned: false,
+          domain: "example.com",
+          title: "Example Page",
+          url: "https://example.com/page",
+          active: false,
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+  const unknownGroupState = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 124,
+          windowId: 456,
+          groupId: 999,
+          pinned: false,
+          domain: "example.org",
+          title: "Example Org",
+          url: "https://example.org",
+          active: false,
+        },
+      ],
+      groups: [],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(missingGroupsState.tabs[0].groupId, 789);
+  assert.equal(missingGroupsState.tabs[0].group, null);
+  assert.equal(unknownGroupState.tabs[0].groupId, 999);
+  assert.equal(unknownGroupState.tabs[0].group, null);
+});
+
+test("mapMozeidonTabsToState ignores invalid lastAccessed values", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          pinned: false,
+          domain: "example.com",
+          title: "Example Page",
+          url: "https://example.com/page",
+          active: false,
+          lastAccessed: 0,
+        },
+        {
+          id: 124,
+          windowId: 456,
+          pinned: false,
+          domain: "example.org",
+          title: "Example Org",
+          url: "https://example.org",
+          active: false,
+          lastAccessed: -1,
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(state.tabs[0].lastAccessed, undefined);
+  assert.equal(state.tabs[1].lastAccessed, undefined);
+});
+
+test("hasGroupMetadata requires a groups array", () => {
+  assert.equal(hasGroupMetadata({ data: [] }), false);
+  assert.equal(hasGroupMetadata({ data: [], groups: [] }), true);
+});
+
+test("sortTabsByLastAccessed uses valid recency without relying on missing values", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 1,
+          windowId: 456,
+          pinned: false,
+          domain: "older.example",
+          title: "Older",
+          url: "https://older.example",
+          active: false,
+          lastAccessed: 100,
+        },
+        {
+          id: 2,
+          windowId: 456,
+          pinned: false,
+          domain: "missing.example",
+          title: "Missing",
+          url: "https://missing.example",
+          active: false,
+        },
+        {
+          id: 3,
+          windowId: 456,
+          pinned: false,
+          domain: "newer.example",
+          title: "Newer",
+          url: "https://newer.example",
+          active: false,
+          lastAccessed: 300,
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.deepEqual(
+    sortTabsByLastAccessed(state.tabs).map((tab) => tab.id),
+    ["3", "1", "2"],
+  );
+  assert.deepEqual(
+    mapMozeidonTabsToState(
+      {
+        data: [
+          {
+            id: 1,
+            windowId: 456,
+            pinned: false,
+            domain: "older.example",
+            title: "Older",
+            url: "https://older.example",
+            active: false,
+            lastAccessed: 100,
+          },
+          {
+            id: 3,
+            windowId: 456,
+            pinned: false,
+            domain: "newer.example",
+            title: "Newer",
+            url: "https://newer.example",
+            active: false,
+            lastAccessed: 300,
+          },
+        ],
+      },
+      "Opened Tabs" as TAB_TYPE,
+      { sortByLastAccessed: true },
+    ).tabs.map((tab) => tab.id),
+    ["3", "1"],
+  );
+});
+
+test("tab metadata helpers keep visible metadata compact", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 1,
+          windowId: 456,
+          groupId: 789,
+          pinned: true,
+          domain: "example.com",
+          title: "Example",
+          url: "https://example.com",
+          active: true,
+        },
+        {
+          id: 2,
+          windowId: 999,
+          pinned: false,
+          domain: "example.org",
+          title: "Example Org",
+          url: "https://example.org",
+          active: false,
+        },
+      ],
+      groups: [
+        {
+          id: 789,
+          windowId: 456,
+          collapsed: false,
+          color: "blue",
+          title: "Work",
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+  const windowCount = getDistinctWindowCount(state.tabs);
+
+  assert.equal(windowCount, 2);
+  assert.deepEqual(buildTabMetadata(state.tabs[0], windowCount), {
+    groupTitle: "Work",
+    isActive: true,
+    isPinned: true,
+    windowLabel: "W456",
+  });
+  assert.deepEqual(buildTabKeywords(state.tabs[0], windowCount), [
+    "example.com",
+    "example.com",
+    "Work",
+    "window 456",
+    "pinned",
+    "active",
+  ]);
+  assert.deepEqual(buildTabKeywords(state.tabs[0], 1), ["example.com", "example.com", "Work", "pinned", "active"]);
+  assert.equal(buildTabMetadata(state.tabs[0], 1).windowLabel, undefined);
 });
 
 test("mapMozeidonBookmarksToTabs preserves current bookmark mapping behavior", () => {
