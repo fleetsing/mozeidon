@@ -26,10 +26,10 @@ export function mapMozeidonTabsToState(
         mozTab.url,
         mozTab.domain,
         mozTab.active,
-        mozTab.groupId,
+        getValidGroupId(mozTab.groupId),
         getGroupForTab(mozTab, groupsById),
-        getValidNumber(mozTab.index),
-        getValidNumber(mozTab.lastAccessed),
+        getValidIndex(mozTab.index),
+        getValidLastAccessed(mozTab.lastAccessed),
       ),
   );
 
@@ -73,11 +73,22 @@ function indexGroupsById(groups: MozeidonGroup[] | undefined): Map<number, TabGr
 }
 
 function getGroupForTab(tab: MozeidonTab, groupsById: Map<number, TabGroup>): TabGroup | null {
-  if (tab.groupId === undefined) return null;
-  return groupsById.get(tab.groupId) ?? null;
+  const groupId = getValidGroupId(tab.groupId);
+  if (groupId === undefined) return null;
+  return groupsById.get(groupId) ?? null;
 }
 
-function getValidNumber(value: number | undefined): number | undefined {
+function getValidGroupId(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return undefined;
+  return value;
+}
+
+function getValidIndex(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
+  return value;
+}
+
+function getValidLastAccessed(value: number | undefined): number | undefined {
   if (value === undefined || !Number.isFinite(value) || value <= 0) return undefined;
   return value;
 }

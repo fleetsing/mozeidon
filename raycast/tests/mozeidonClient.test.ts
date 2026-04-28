@@ -271,6 +271,60 @@ test("mapMozeidonTabsToState attaches rich group metadata when available", () =>
   assert.equal(state.tabs[0].index, 3);
 });
 
+test("mapMozeidonTabsToState preserves zero-based tab indexes", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          pinned: false,
+          domain: "example.com",
+          title: "First Tab",
+          url: "https://example.com",
+          active: false,
+          index: 0,
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(state.tabs[0].index, 0);
+});
+
+test("mapMozeidonTabsToState normalizes non-positive group ids", () => {
+  const state = mapMozeidonTabsToState(
+    {
+      data: [
+        {
+          id: 123,
+          windowId: 456,
+          groupId: -1,
+          pinned: false,
+          domain: "example.com",
+          title: "Ungrouped",
+          url: "https://example.com",
+          active: false,
+        },
+      ],
+      groups: [
+        {
+          id: -1,
+          windowId: 456,
+          collapsed: false,
+          color: "grey",
+          title: "Invalid Sentinel",
+        },
+      ],
+    },
+    "Opened Tabs" as TAB_TYPE,
+  );
+
+  assert.equal(state.tabs[0].groupId, undefined);
+  assert.equal(state.tabs[0].group, null);
+});
+
 test("mapMozeidonTabsToState handles missing or unknown group metadata", () => {
   const missingGroupsState = mapMozeidonTabsToState(
     {
@@ -472,7 +526,7 @@ test("tab metadata helpers keep visible metadata compact", () => {
     isPinned: true,
     windowLabel: "W456",
   });
-  assert.deepEqual(buildTabKeywords(state.tabs[0]), [
+  assert.deepEqual(buildTabKeywords(state.tabs[0], windowCount), [
     "example.com",
     "example.com",
     "Work",
@@ -480,6 +534,7 @@ test("tab metadata helpers keep visible metadata compact", () => {
     "pinned",
     "active",
   ]);
+  assert.deepEqual(buildTabKeywords(state.tabs[0], 1), ["example.com", "example.com", "Work", "pinned", "active"]);
   assert.equal(buildTabMetadata(state.tabs[0], 1).windowLabel, undefined);
 });
 

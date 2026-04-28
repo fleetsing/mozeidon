@@ -46,11 +46,12 @@ export function fetchOpenTabs(): TabState {
       ...getMozeidonOptions(),
       context: "tabs get --with-groups",
     });
+    // Supported --with-groups output includes a groups array, even when empty.
     if (hasGroupMetadata(parsedTabs)) {
       return mapMozeidonTabsToState(parsedTabs, TAB_TYPE.OPENED_TABS, { sortByLastAccessed: true });
     }
   } catch (error) {
-    if (!(error instanceof MozeidonClientError)) throw error;
+    if (!(error instanceof MozeidonClientError) || error.code === "not_found") throw error;
   }
 
   const parsedTabs = runMozeidonJson<{ data: MozeidonTab[] }>(["tabs", "get"], {

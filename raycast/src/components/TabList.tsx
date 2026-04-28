@@ -47,7 +47,9 @@ function TabItem({ isLoading, type, tab, windowCount, onCloseTab }: TabItemProps
       id={tab.id.toString()}
       title={tab.title}
       subtitle={tab.domain}
-      keywords={type === TAB_TYPE.OPENED_TABS ? buildTabKeywords(tab) : [tab.domain, tab.urlWithoutScheme()]}
+      keywords={
+        type === TAB_TYPE.OPENED_TABS ? buildTabKeywords(tab, windowCount) : [tab.domain, tab.urlWithoutScheme()]
+      }
       accessories={accessories}
       actions={<TabActions.OpenTabListItem tab={tab} type={type} isLoading={isLoading} onCloseTab={onCloseTab} />}
       icon={getFavicon(tab.url, { mask: Image.Mask.RoundedRectangle })}
