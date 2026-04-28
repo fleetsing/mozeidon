@@ -74,15 +74,18 @@ function OpenTabListItemAction(props: {
   } = props;
   const availableActions = getAvailableTabActionIds(type, tab, groups, lastTabIndexByWindow);
   const availableBookmarkActions = getAvailableBookmarkActionIds(type, tab);
+  const canMutateBookmarks = !isLoading;
 
   return (
     <ActionPanel title={tab.title}>
       <GoToOpenTabAction tab={tab} type={type} isLoading={isLoading} />
-      {availableBookmarkActions.includes("addBookmark") ? <AddBookmarkAction tab={tab} /> : undefined}
-      {availableBookmarkActions.includes("editBookmark") ? (
+      {canMutateBookmarks && availableBookmarkActions.includes("addBookmark") ? (
+        <AddBookmarkAction tab={tab} />
+      ) : undefined}
+      {canMutateBookmarks && availableBookmarkActions.includes("editBookmark") ? (
         <EditBookmarkAction tab={tab} onUpdateBookmark={onUpdateBookmark} />
       ) : undefined}
-      {availableBookmarkActions.includes("deleteBookmark") ? (
+      {canMutateBookmarks && availableBookmarkActions.includes("deleteBookmark") ? (
         <DeleteBookmarkAction tab={tab} onDeleteBookmark={onDeleteBookmark} />
       ) : undefined}
       {availableActions.includes("pin") ? <PinTabAction tab={tab} onRefreshOpenTabs={onRefreshOpenTabs} /> : undefined}
@@ -343,7 +346,7 @@ type BookmarkFormValues = {
 function BookmarkForm(props: { mode: "create" | "edit"; tab: Tab; onUpdateBookmark?: (tab: Tab) => void }) {
   const { pop } = useNavigation();
 
-  async function handleSubmit(values: BookmarkFormValues) {
+  async function handleSubmit(values: BookmarkFormValues): Promise<void> {
     const requiredFieldError = validateBookmarkRequiredFields(values);
     if (requiredFieldError) {
       await showToast({
@@ -351,7 +354,7 @@ function BookmarkForm(props: { mode: "create" | "edit"; tab: Tab; onUpdateBookma
         message: requiredFieldError,
         style: Toast.Style.Failure,
       });
-      return false;
+      return;
     }
 
     const folderPathError = validateBookmarkFolderPath(values.folderPath);
@@ -361,7 +364,7 @@ function BookmarkForm(props: { mode: "create" | "edit"; tab: Tab; onUpdateBookma
         message: folderPathError,
         style: Toast.Style.Failure,
       });
-      return false;
+      return;
     }
 
     try {
@@ -388,7 +391,7 @@ function BookmarkForm(props: { mode: "create" | "edit"; tab: Tab; onUpdateBookma
             title: "No Bookmark Changes",
             style: Toast.Style.Success,
           });
-          return false;
+          return;
         }
 
         props.onUpdateBookmark?.(
@@ -419,7 +422,7 @@ function BookmarkForm(props: { mode: "create" | "edit"; tab: Tab; onUpdateBookma
         message: error instanceof Error ? error.message : undefined,
         style: Toast.Style.Failure,
       });
-      return false;
+      return;
     }
   }
 

@@ -69,19 +69,21 @@ export default function Command(): ReactElement {
             onDeleteBookmark={
               type === TAB_TYPE.BOOKMARKS
                 ? () =>
-                    setData({
+                    setData((prev) => ({
+                      ...prev,
                       type: TAB_TYPE.BOOKMARKS,
-                      tabs: tabs.filter((t) => t.id !== tab.id),
-                    })
+                      tabs: prev.tabs.filter((t) => t.id !== tab.id),
+                    }))
                 : undefined
             }
             onUpdateBookmark={
               type === TAB_TYPE.BOOKMARKS
                 ? (updatedTab) =>
-                    setData({
+                    setData((prev) => ({
+                      ...prev,
                       type: TAB_TYPE.BOOKMARKS,
-                      tabs: tabs.map((t) => (t.id === tab.id ? updatedTab : t)),
-                    })
+                      tabs: prev.tabs.map((t) => (t.id === tab.id ? updatedTab : t)),
+                    }))
                 : undefined
             }
           />
