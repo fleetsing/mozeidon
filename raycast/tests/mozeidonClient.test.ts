@@ -4,6 +4,8 @@ import type { ChildProcessWithoutNullStreams, ExecFileSyncOptionsWithStringEncod
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { TAB_TYPE } from "../src/tabTypes";
+import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../src/historyCommands";
+import { mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
 import {
   MozeidonClientError,
   buildMozeidonArgs,
@@ -100,11 +102,97 @@ test("buildMozeidonArgs applies profile support to representative commands", () 
       command: ["tabs", "update", "--tab-id", "123", "--window-id", "456", "--group-id", "789"],
       expected: ["--profile-id", "Zen", "tabs", "update", "--tab-id", "123", "--window-id", "456", "--group-id", "789"],
     },
+    {
+      command: ["history", "--max", "500"],
+      expected: ["--profile-id", "Zen", "history", "--max", "500"],
+    },
+    {
+      command: ["history", "delete", "--url", "https://example.com/page"],
+      expected: ["--profile-id", "Zen", "history", "delete", "--url", "https://example.com/page"],
+    },
   ];
 
   for (const testCase of cases) {
     assert.deepEqual(buildMozeidonArgs(testCase.command, { profileId: "Zen" }), testCase.expected);
   }
+});
+
+test("history command builders use safe CLI argument shapes", () => {
+  assert.deepEqual(buildFetchHistoryArgs(), ["history", "--max", "500"]);
+  assert.deepEqual(buildFetchHistoryArgs(50), ["history", "--max", "50"]);
+  assert.deepEqual(buildFetchHistoryArgs(0), ["history"]);
+  assert.deepEqual(buildDeleteHistoryItemArgs({ url: "https://example.com/page" }), [
+    "history",
+    "delete",
+    "--url",
+    "https://example.com/page",
+  ]);
+  assert.equal(buildDeleteHistoryItemArgs({ url: "https://example.com/page" }).includes("--all"), false);
+});
+
+test("mapMozeidonHistoryItemsToHistoryItems normalizes history payloads", () => {
+  const items = mapMozeidonHistoryItemsToHistoryItems([
+    {
+      id: "history-1",
+      url: "https://www.example.com/page",
+      title: " Example Page ",
+      tc: 2,
+      vc: 5,
+      t: 1710000000000,
+    },
+    {
+      id: "",
+      url: "not a url",
+      title: "",
+      tc: 0,
+      vc: -1,
+      t: Number.NaN,
+    },
+  ]);
+
+  assert.deepEqual(items[0], {
+    id: "history-1",
+    title: "Example Page",
+    url: "https://www.example.com/page",
+    domain: "example.com",
+    typedCount: 2,
+    visitCount: 5,
+    lastVisitTime: 1710000000000,
+  });
+  assert.deepEqual(items[1], {
+    id: "not a url",
+    title: "not a url",
+    url: "not a url",
+    domain: "not a url",
+    typedCount: undefined,
+    visitCount: undefined,
+    lastVisitTime: undefined,
+  });
+});
+
+test("history open and delete inputs remain child process args", () => {
+  const calls: Array<{ file: string; args: string[]; options: ExecFileSyncOptionsWithStringEncoding }> = [];
+  const unsafeUrl = 'https://example.com/a"; rm -rf /; $(whoami)';
+
+  runMozeidon(buildNewTabArgs(unsafeUrl, "https://google.com/search?q="), {
+    executable: "mozeidon",
+    execFile: (file, args, options) => {
+      calls.push({ file, args, options });
+      return "";
+    },
+  });
+  runMozeidon(buildDeleteHistoryItemArgs({ url: unsafeUrl }), {
+    executable: "mozeidon",
+    execFile: (file, args, options) => {
+      calls.push({ file, args, options });
+      return "";
+    },
+  });
+
+  assert.deepEqual(calls[0].args, ["tabs", "new", "--", new URL(unsafeUrl).toString()]);
+  assert.deepEqual(calls[1].args, ["history", "delete", "--url", unsafeUrl]);
+  assert.equal("shell" in calls[0].options, false);
+  assert.equal("shell" in calls[1].options, false);
 });
 
 test("tab action argument builders use current CLI command shapes", () => {
