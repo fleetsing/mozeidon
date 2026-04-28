@@ -13,12 +13,18 @@ import {
 } from "../constants";
 import {
   buildNewTabArgs,
+  MozeidonClientError,
   parseMozeidonJson,
   runMozeidon,
   runMozeidonJson,
   streamMozeidonLines,
 } from "../mozeidonClient";
-import { mapMozeidonBookmarksToTabs, mapMozeidonTabsToState } from "../tabMappers";
+import {
+  hasGroupMetadata,
+  mapMozeidonBookmarksToTabs,
+  mapMozeidonTabsToState,
+  MozeidonTabsPayload,
+} from "../tabMappers";
 
 export function openNewTab(queryText: string | null | undefined): void {
   runMozeidon(buildNewTabArgs(queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
@@ -35,12 +41,24 @@ export function closeTab(tab: Tab): void {
 }
 
 export function fetchOpenTabs(): TabState {
+  try {
+    const parsedTabs = runMozeidonJson<MozeidonTabsPayload>(["tabs", "get", "--with-groups"], {
+      ...getMozeidonOptions(),
+      context: "tabs get --with-groups",
+    });
+    if (hasGroupMetadata(parsedTabs)) {
+      return mapMozeidonTabsToState(parsedTabs, TAB_TYPE.OPENED_TABS, { sortByLastAccessed: true });
+    }
+  } catch (error) {
+    if (!(error instanceof MozeidonClientError)) throw error;
+  }
+
   const parsedTabs = runMozeidonJson<{ data: MozeidonTab[] }>(["tabs", "get"], {
     ...getMozeidonOptions(),
     context: "tabs get",
     fallback: TABS_FALLBACK,
   });
-  return mapMozeidonTabsToState(parsedTabs, TAB_TYPE.OPENED_TABS);
+  return mapMozeidonTabsToState(parsedTabs, TAB_TYPE.OPENED_TABS, { sortByLastAccessed: true });
 }
 
 export function fetchRecentlyClosedTabs(): TabState {

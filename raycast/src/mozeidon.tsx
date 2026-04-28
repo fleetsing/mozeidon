@@ -3,6 +3,7 @@ import { ReactElement, useState } from "react";
 import { TabList, TabTypeDropdown } from "./components";
 import { COMMAND_NAME, TAB_TYPE } from "./constants";
 import { useMozeidonTabs } from "./hooks/useMozeidon";
+import { getDistinctWindowCount } from "./tabMetadata";
 
 export default function Command(): ReactElement {
   const [searchText, setSearchText] = useState<string>("");
@@ -15,6 +16,7 @@ export default function Command(): ReactElement {
     changeTabType,
     setData,
   ] = useMozeidonTabs();
+  const windowCount = getDistinctWindowCount(tabs);
 
   if (errorView) return errorView as ReactElement;
   return (
@@ -46,6 +48,7 @@ export default function Command(): ReactElement {
             isLoading={isLoading}
             type={type}
             tab={tab}
+            windowCount={windowCount}
             key={tab.id.toString()}
             onCloseTab={
               type === TAB_TYPE.OPENED_TABS
