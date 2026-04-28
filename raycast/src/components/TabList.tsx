@@ -15,6 +15,8 @@ type TabItemProps = {
   groups: TabGroup[];
   lastTabIndexByWindow: Map<number, number>;
   onRefreshOpenTabs: (() => Promise<void>) | undefined;
+  onDeleteBookmark: (() => void) | undefined;
+  onUpdateBookmark: ((tab: Tab) => void) | undefined;
 };
 
 export class TabList {
@@ -41,6 +43,8 @@ function TabItem({
   groups,
   lastTabIndexByWindow,
   onRefreshOpenTabs,
+  onDeleteBookmark,
+  onUpdateBookmark,
 }: TabItemProps) {
   const metadata = buildTabMetadata(tab, type === TAB_TYPE.OPENED_TABS ? windowCount : 1);
   const accessories = [
@@ -72,6 +76,8 @@ function TabItem({
           groups={groups}
           lastTabIndexByWindow={lastTabIndexByWindow}
           onRefreshOpenTabs={onRefreshOpenTabs}
+          onDeleteBookmark={onDeleteBookmark}
+          onUpdateBookmark={onUpdateBookmark}
         />
       }
       icon={getFavicon(tab.url, { mask: Image.Mask.RoundedRectangle })}
