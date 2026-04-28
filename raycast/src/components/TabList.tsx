@@ -13,7 +13,7 @@ type TabItemProps = {
   windowCount: number;
   onCloseTab: (() => void) | undefined;
   groups: TabGroup[];
-  tabs: Tab[];
+  lastTabIndexByWindow: Map<number, number>;
   onRefreshOpenTabs: (() => Promise<void>) | undefined;
 };
 
@@ -32,7 +32,16 @@ function NewTabItem({ searchText }: NewTabItemProps) {
   );
 }
 
-function TabItem({ isLoading, type, tab, windowCount, onCloseTab, groups, tabs, onRefreshOpenTabs }: TabItemProps) {
+function TabItem({
+  isLoading,
+  type,
+  tab,
+  windowCount,
+  onCloseTab,
+  groups,
+  lastTabIndexByWindow,
+  onRefreshOpenTabs,
+}: TabItemProps) {
   const metadata = buildTabMetadata(tab, type === TAB_TYPE.OPENED_TABS ? windowCount : 1);
   const accessories = [
     metadata.isPinned ? { icon: Icon.Pin, tooltip: "Pinned" } : undefined,
@@ -61,7 +70,7 @@ function TabItem({ isLoading, type, tab, windowCount, onCloseTab, groups, tabs, 
           isLoading={isLoading}
           onCloseTab={onCloseTab}
           groups={groups}
-          tabs={tabs}
+          lastTabIndexByWindow={lastTabIndexByWindow}
           onRefreshOpenTabs={onRefreshOpenTabs}
         />
       }

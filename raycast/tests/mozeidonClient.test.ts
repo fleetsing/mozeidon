@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { ChildProcessWithoutNullStreams, ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import type { TAB_TYPE } from "../src/constants";
+import { TAB_TYPE } from "../src/tabTypes";
 import {
   MozeidonClientError,
   buildMozeidonArgs,
@@ -15,6 +15,7 @@ import {
 } from "../src/mozeidonClient";
 import {
   buildDuplicateTabArgs,
+  buildLastTabIndexByWindow,
   buildMoveTabToEndArgs,
   buildMoveTabToGroupArgs,
   buildMoveTabToStartArgs,
@@ -166,22 +167,35 @@ test("tab action availability is limited to opened tabs and current tab state", 
     { id: 111, windowId: 999, title: "Other Window" },
   ];
 
-  assert.deepEqual(getAvailableTabActionIds("Recently Closed" as TAB_TYPE, unpinnedTab, groups), []);
-  assert.deepEqual(getAvailableTabActionIds("Bookmarks" as TAB_TYPE, unpinnedTab, groups), []);
-  assert.ok(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, unpinnedTab, []).includes("pin"));
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, unpinnedTab, []).includes("unpin"), false);
-  assert.ok(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, pinnedTab, []).includes("unpin"));
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, pinnedTab, []).includes("pin"), false);
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, firstTab, []).includes("moveToStart"), false);
+  const lastTabIndexByWindow = buildLastTabIndexByWindow([unpinnedTab, lastTab]);
+
+  assert.deepEqual(getAvailableTabActionIds(TAB_TYPE.RECENTLY_CLOSED, unpinnedTab, groups), []);
+  assert.deepEqual(getAvailableTabActionIds(TAB_TYPE.BOOKMARKS, unpinnedTab, groups), []);
+  assert.ok(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, []).includes("pin"));
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, []).includes("unpin"), false);
+  assert.ok(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, pinnedTab, []).includes("unpin"));
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, pinnedTab, []).includes("pin"), false);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, firstTab, []).includes("moveToStart"), false);
   assert.equal(
-    getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, lastTab, groups, [unpinnedTab, lastTab]).includes("moveToEnd"),
+    getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, lastTab, groups, lastTabIndexByWindow).includes("moveToEnd"),
     false,
   );
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, unpinnedTab, []).includes("moveToGroup"), false);
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, unpinnedTab, groups).includes("moveToGroup"), true);
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, unpinnedTab, groups).includes("ungroup"), false);
-  assert.equal(getAvailableTabActionIds("Opened Tabs" as TAB_TYPE, groupedTab, groups).includes("ungroup"), true);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, []).includes("moveToGroup"), false);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, groups).includes("moveToGroup"), true);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, unpinnedTab, groups).includes("ungroup"), false);
+  assert.equal(getAvailableTabActionIds(TAB_TYPE.OPENED_TABS, groupedTab, groups).includes("ungroup"), true);
   assert.deepEqual(getMoveToGroupTargets(groupedTab, groups), [{ id: 999, windowId: 456, title: "Personal" }]);
+});
+
+test("buildLastTabIndexByWindow precomputes reliable last indexes by window", () => {
+  const tabs = [
+    createTab({ id: "1", windowId: 456, index: 0 }),
+    createTab({ id: "2", windowId: 456, index: 3 }),
+    createTab({ id: "3", windowId: 999, index: 2 }),
+    createTab({ id: "4", windowId: 999 }),
+  ];
+
+  assert.deepEqual([...buildLastTabIndexByWindow(tabs).entries()], [[456, 3]]);
 });
 
 test("buildNewTabArgs handles empty, URL, and search queries", () => {

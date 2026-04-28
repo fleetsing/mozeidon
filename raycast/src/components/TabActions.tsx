@@ -40,11 +40,11 @@ function OpenTabListItemAction(props: {
   tab: Tab;
   onCloseTab: (() => void) | undefined;
   groups: TabGroup[];
-  tabs: Tab[];
+  lastTabIndexByWindow: Map<number, number>;
   onRefreshOpenTabs: (() => Promise<void>) | undefined;
 }) {
-  const { groups, isLoading, onCloseTab, onRefreshOpenTabs, tab, tabs, type } = props;
-  const availableActions = getAvailableTabActionIds(type, tab, groups, tabs);
+  const { groups, isLoading, lastTabIndexByWindow, onCloseTab, onRefreshOpenTabs, tab, type } = props;
+  const availableActions = getAvailableTabActionIds(type, tab, groups, lastTabIndexByWindow);
 
   return (
     <ActionPanel title={tab.title}>

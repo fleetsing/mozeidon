@@ -3,6 +3,7 @@ import { ReactElement, useState } from "react";
 import { TabList, TabTypeDropdown } from "./components";
 import { COMMAND_NAME, TAB_TYPE } from "./constants";
 import { useMozeidonTabs } from "./hooks/useMozeidon";
+import { buildLastTabIndexByWindow } from "./tabActionCommands";
 import { getDistinctWindowCount } from "./tabMetadata";
 
 export default function Command(): ReactElement {
@@ -17,6 +18,7 @@ export default function Command(): ReactElement {
     setData,
   ] = useMozeidonTabs();
   const windowCount = getDistinctWindowCount(tabs);
+  const lastTabIndexByWindow = buildLastTabIndexByWindow(tabs);
 
   if (errorView) return errorView as ReactElement;
   return (
@@ -57,11 +59,12 @@ export default function Command(): ReactElement {
                     setData({
                       type: TAB_TYPE.OPENED_TABS,
                       tabs: tabs.filter((t) => `${t.windowId}${t.id}` !== `${tab.windowId}${tab.id}`),
+                      groups,
                     })
                 : undefined
             }
             groups={groups ?? []}
-            tabs={tabs}
+            lastTabIndexByWindow={lastTabIndexByWindow}
             onRefreshOpenTabs={type === TAB_TYPE.OPENED_TABS ? () => changeTabType(TAB_TYPE.OPENED_TABS) : undefined}
           />
         ))}

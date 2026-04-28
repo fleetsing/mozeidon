@@ -1,4 +1,4 @@
-import type { TAB_TYPE } from "./constants";
+import { TAB_TYPE } from "./tabTypes";
 import { Tab, TabGroup } from "./interfaces";
 
 export type TabActionId = "pin" | "unpin" | "duplicate" | "moveToStart" | "moveToEnd" | "moveToGroup" | "ungroup";
@@ -35,9 +35,9 @@ export function getAvailableTabActionIds(
   type: TAB_TYPE,
   tab: Tab,
   groups: TabGroup[] = [],
-  tabs: Tab[] = [],
+  lastTabIndexByWindow?: Map<number, number>,
 ): TabActionId[] {
-  if (type !== "Opened Tabs") return [];
+  if (type !== TAB_TYPE.OPENED_TABS) return [];
 
   const actions: TabActionId[] = [];
 
@@ -45,7 +45,7 @@ export function getAvailableTabActionIds(
   actions.push("duplicate");
 
   if (tab.index !== 0) actions.push("moveToStart");
-  if (!isLastTabInWindow(tab, tabs)) actions.push("moveToEnd");
+  if (!isLastTabInWindow(tab, lastTabIndexByWindow)) actions.push("moveToEnd");
   if (getMoveToGroupTargets(tab, groups).length > 0) actions.push("moveToGroup");
   if (tab.groupId !== undefined) actions.push("ungroup");
 
@@ -69,16 +69,37 @@ export function formatTabGroupTitle(group: TabGroup): string {
   return group.title?.trim() || `Group ${group.id}`;
 }
 
+export function buildLastTabIndexByWindow(tabs: Tab[]): Map<number, number> {
+  const lastTabIndexByWindow = new Map<number, number>();
+  const windowsWithMissingIndex = new Set<number>();
+
+  for (const tab of tabs) {
+    if (tab.index === undefined) {
+      windowsWithMissingIndex.add(tab.windowId);
+      continue;
+    }
+
+    const currentLastIndex = lastTabIndexByWindow.get(tab.windowId);
+    if (currentLastIndex === undefined || tab.index > currentLastIndex) {
+      lastTabIndexByWindow.set(tab.windowId, tab.index);
+    }
+  }
+
+  for (const windowId of windowsWithMissingIndex) {
+    lastTabIndexByWindow.delete(windowId);
+  }
+
+  return lastTabIndexByWindow;
+}
+
 function buildUpdateTabArgs(tab: Tab, ...args: string[]): string[] {
   return ["tabs", "update", "--tab-id", tab.id, "--window-id", tab.windowId.toString(), ...args];
 }
 
-function isLastTabInWindow(tab: Tab, tabs: Tab[]): boolean {
-  if (tab.index === undefined || tabs.length === 0) return false;
+function isLastTabInWindow(tab: Tab, lastTabIndexByWindow?: Map<number, number>): boolean {
+  if (tab.index === undefined || !lastTabIndexByWindow) return false;
 
-  const windowTabs = tabs.filter((candidate) => candidate.windowId === tab.windowId);
-  if (windowTabs.length === 0 || windowTabs.some((candidate) => candidate.index === undefined)) return false;
-
-  const lastIndex = Math.max(...windowTabs.map((candidate) => candidate.index ?? -1));
+  const lastIndex = lastTabIndexByWindow.get(tab.windowId);
+  if (lastIndex === undefined) return false;
   return tab.index === lastIndex;
 }

@@ -1,5 +1,6 @@
 import { getPreferenceValues } from "@raycast/api";
 import type { Preferences } from "./interfaces";
+export { TAB_TYPE } from "./tabTypes";
 
 const preferences = getPreferenceValues<Preferences>();
 
@@ -13,13 +14,6 @@ export const SEARCH_ENGINE = preferences.searchEngine;
 export const FIREFOX_OPEN_COMMAND = preferences.firefox;
 
 export const TABS_FALLBACK = `{"data":[]}`;
-
-export enum TAB_TYPE {
-  OPENED_TABS = "Opened Tabs",
-  RECENTLY_CLOSED = "Recently Closed",
-  BOOKMARKS = "Bookmarks",
-  NONE = "",
-}
 
 // Change this to your fork URL if you want Raycast's help link
 // to open your patched README instead of upstream.
