@@ -7,6 +7,7 @@ import (
 
 	"github.com/egovelox/mozeidon/cmd/bookmark"
 	"github.com/egovelox/mozeidon/cmd/bookmarks"
+	contextcmd "github.com/egovelox/mozeidon/cmd/context"
 	"github.com/egovelox/mozeidon/cmd/flags"
 	"github.com/egovelox/mozeidon/cmd/groups"
 	"github.com/egovelox/mozeidon/cmd/history"
@@ -36,6 +37,7 @@ func init() {
 	rootCmd.AddCommand(tabs.TabsCmd)
 	rootCmd.AddCommand(bookmarks.BookmarksCmd)
 	rootCmd.AddCommand(bookmark.BookmarkCmd)
+	rootCmd.AddCommand(contextcmd.ContextCmd)
 	rootCmd.AddCommand(history.HistoryCmd)
 	rootCmd.AddCommand(groups.GroupsCmd)
 	rootCmd.AddCommand(profiles.ProfilesCmd)

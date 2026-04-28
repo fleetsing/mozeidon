@@ -16,6 +16,7 @@ export enum CommandName {
   NEW_GROUP_TAB = "new-group-tab",
   UPDATE_PROFILE = "update-profile",
   GET_WINDOWS = "get-windows",
+  GET_CONTEXT = "get-context",
 }
 export type Command = {
   command: CommandName

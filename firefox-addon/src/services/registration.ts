@@ -35,8 +35,9 @@ async function getOrCreateProfile({
   // Storage is isolated per profile
   const stored = await browser.storage.local.get(PROFILE_STORAGE_KEY)
 
-  if (stored.mozeidon_profile_id) {
-    return stored as StoredProfile
+  const storedProfile = stored[PROFILE_STORAGE_KEY] as StoredProfile | undefined
+  if (storedProfile?.id) {
+    return storedProfile
   }
 
   // First time in this profile - generate new UUID
