@@ -8,8 +8,11 @@ The first implementation should prioritize correctness, clear failure modes, lea
 
 ## Status
 
-- Proposed
-- Do not implement until explicitly approved.
+- Implemented
+- V1 adds the CLI/add-on context extraction path without browser permission changes.
+- HTML remains guarded by `html_sanitizer_missing` until sanitizer behavior is implemented and tested.
+- Real DOM extraction depends on the browser granting active-tab/page script access; when unavailable, commands return structured partial/error JSON.
+- Manual 7.2 verification showed that permission-denied fallbacks must clearly distinguish tab metadata from real DOM extraction.
 
 ## Milestone
 
@@ -412,7 +415,7 @@ Blank normal pages should not be treated as privileged:
 - Add active tab lookup using existing browser APIs.
 - Add URL support classifier shared by extraction modes.
 - Add access checks before script injection.
-- Add structured permission/capability payloads.
+- Add structured permission/capability payloads that distinguish tab metadata from DOM/page access.
 - Update `manifest.json` only if needed for `activeTab`.
 - Document exact manifest change in this spec's progress log.
 
@@ -538,10 +541,26 @@ Verify:
 
 - each command emits one valid JSON object;
 - output matches `kind`, `version`, `ok`, `status`, `source`, `capturedAt`, and contract fields;
+- without host permission, active text/Markdown may include title+URL fallback, but it must be marked as `extraction.contentSource: "tab-metadata"` and `extraction.domRead: false`;
+- without host permission, selection, metadata, and links must be unavailable/permission-gated rather than empty successful reads;
 - warnings appear for truncation, unavailable permissions, unsupported pages, selector no-match, malformed JSON-LD, and degraded extraction;
 - privileged pages do not expose DOM or browser chrome content;
 - no broad permission prompt appears unless explicitly documented;
 - existing tabs/bookmarks/history commands still work.
+
+### Narrow Host-Permission Verification
+
+To verify real DOM extraction locally without committing broad permissions:
+
+1. Temporarily add only the test origin to `firefox-addon/manifest.json`, for example `https://en.wikipedia.org/*`.
+2. Run `npm run build` from `firefox-addon/`.
+3. Reload the temporary add-on in Zen.
+4. Open `https://en.wikipedia.org/wiki/Raycast_(software)` and select the first paragraph.
+5. Run the context commands above.
+6. Confirm text, selection, metadata, and links report `extraction.domRead: true` and real page-derived fields.
+7. Revert the temporary manifest permission before committing.
+
+The committed default must not include `<all_urls>` or this Wikipedia host permission.
 
 ## Build And Validation Commands
 
@@ -607,13 +626,47 @@ npm run build
 - Add-on tests pass where test infrastructure exists, or gaps are documented.
 - Raycast lint/build/tests pass if Raycast is touched.
 
+## Manual 7.2 Decisions
+
+Manual verification against a Wikipedia page without host permission showed that the V1 fallback path was structurally valid but too easy for consumers to misread as successful page extraction.
+
+Decisions:
+
+- Title and URL fallback is tab metadata, not page-content extraction.
+- Fallback content must expose `extraction.contentSource: "tab-metadata"` and `extraction.domRead: false`.
+- Real DOM extraction must expose `extraction.domRead: true` and an appropriate `contentSource` such as `"document"`, `"selector"`, `"selection"`, or `"focused-input"`.
+- Permission reporting should distinguish tab metadata availability from DOM access. V1 payloads should prefer:
+  - `permissions.canReadTabMetadata`
+  - `permissions.hasDomAccess`
+  - `permissions.hasActiveTabGrant`
+  - `permissions.hasHostPermission`
+  - `permissions.canReadPageContent`
+  - `permissions.canReadSelection`
+- `permissions.canReadActiveTab` is legacy and should not be treated as DOM access. V1 should set it to `false` in permission-denied DOM paths and use `canReadTabMetadata` for tab identity availability.
+- If DOM permission is missing, `context selection` must not report a definite `isCollapsed: true` / `source: "none"` selection state. Omit `content.selection` and report `permission_unavailable`.
+- If DOM permission is missing, `context metadata` and `context links` must not return empty arrays/objects as if extraction succeeded. Omit those extracted fields and report `permission_unavailable`.
+- Empty metadata/link arrays mean the page was actually read and none were found.
+- `--format html` remains disabled with `html_sanitizer_missing` until sanitizer support is implemented and tested.
+- A local verification build may temporarily add a narrow host permission such as `https://en.wikipedia.org/*`, but committed defaults must not add broad host permissions.
+- `--require-content` is needed by future Raycast summarization flows; it is documented as an immediate follow-up unless added in this spec.
+
 ## Open Questions
 
 - Is `activeTab` plus a browser-action/manual-grant flow acceptable for the first usable implementation, knowing Raycast-pulled context may need later onboarding?
 - Does the current native-message transport reliably carry near-1 MB JSON payloads, or should V1 lower `maxBytes` before proposing transport changes?
 - Should sanitized HTML ship in the same implementation as text/Markdown/selection, or remain `html_sanitizer_missing` until a sanitizer dependency is reviewed?
 - Is a lightweight local Markdown converter sufficient for V1, or should implementation propose an audited dependency?
+- Should `--require-content` be implemented on the CLI context commands before the first Raycast summarization command, or should it land with the Raycast command that needs it?
 
 ## Progress Log
 
 - 2026-04-28: Created implementation spec from approved Spec 007 contract. No code implemented.
+- 2026-04-28: Added CLI context extraction request/payload mapping over the existing `Command{command,args}` transport.
+- 2026-04-28: Added Firefox add-on `get-context` command and context extraction service using active-tab script execution when the browser permits it.
+- 2026-04-28: Kept native messenger protocol unchanged by encoding the context request as JSON in the existing `args` string.
+- 2026-04-28: Kept browser add-on permissions unchanged; no `<all_urls>`, host permissions, or `activeTab` manifest permission were added in this implementation.
+- 2026-04-28: Kept `--format html` as structured `html_sanitizer_missing`; sanitized HTML extraction remains a follow-up.
+- 2026-04-28: Added Go tests for context command flags, request construction, extraction payload mapping, truncation, unsupported pages, and existing contract behavior.
+- 2026-04-28: Fixed V1 add-on extraction to honor global `maxBytes` for extracted content, skip malformed page-derived link/image URLs without aborting extraction, and warn that Markdown is plain-text-derived until richer conversion ships.
+- 2026-04-28: Fixed add-on profile registration reuse so temporary add-on reconnects do not rotate `profileId` on every native-app reconnect.
+- 2026-04-28: Updated V1 semantics from manual 7.2 verification: tab metadata fallback is explicitly marked as non-DOM, permission-denied selection/metadata/links are unavailable instead of empty successful reads, and permission fields distinguish tab metadata from DOM access.

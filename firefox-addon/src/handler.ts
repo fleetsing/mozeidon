@@ -18,6 +18,7 @@ import {
 import { updateProfiles } from "./services/profiles"
 import { getGroups, moveGroup, updateGroup } from "./services/groups"
 import { getWindows } from "./services/windows"
+import { getContext } from "./services/context"
 
 export async function handler(port: Port, cmd: Command) {
   switch (cmd.command) {
@@ -55,6 +56,8 @@ export async function handler(port: Port, cmd: Command) {
       return await updateProfiles(port, cmd)
     case CommandName.GET_WINDOWS:
       return await getWindows(port, cmd)
+    case CommandName.GET_CONTEXT:
+      return await getContext(port, cmd)
     default:
       log("unknown command received in handler")
       return port.postMessage(Response.end())

@@ -433,7 +433,8 @@ type ZenExtractionInfo = {
   selector?: string;
   selectorMatched?: boolean;
   selectorMatchCount?: number;
-  contentSource?: "document" | "selector" | "selection" | "focused-input";
+  contentSource?: "document" | "selector" | "selection" | "focused-input" | "tab-metadata";
+  domRead: boolean;
   warnings: ZenExtractionWarning[];
   limits: ZenExtractionLimits;
   truncation: ZenTruncationInfo;
@@ -471,6 +472,11 @@ type ZenTruncationInfo = {
 };
 
 type ZenPermissionInfo = {
+  canReadTabMetadata: boolean;
+  hasDomAccess: boolean;
+  hasActiveTabGrant: boolean;
+  hasHostPermission: boolean;
+  /** Legacy compatibility field; consumers should not treat this as DOM access. */
   canReadActiveTab: boolean;
   canReadSelection: boolean;
   canReadPageContent: boolean;
@@ -892,6 +898,14 @@ Rules:
   - `--max-links`;
   - `--max-images`.
 
+Fallback rules:
+
+- Title and URL fallback from tab metadata is not page-content extraction.
+- Tab metadata fallback must report `extraction.contentSource: "tab-metadata"` and `extraction.domRead: false`.
+- Real DOM extraction must report `extraction.domRead: true`.
+- If DOM access is unavailable, selection, metadata, and links must be represented as unavailable through warnings/permissions/capabilities, not as empty successful reads.
+- Empty metadata/link arrays mean the page was actually read and none were found.
+
 ## Permission Model
 
 This spec does not authorize new browser permissions. It defines how the API should report permissions and capabilities.
@@ -930,6 +944,10 @@ Principles:
 Permission reporting:
 
 - `permissions.canReadActiveTab`
+- `permissions.canReadTabMetadata`
+- `permissions.hasDomAccess`
+- `permissions.hasActiveTabGrant`
+- `permissions.hasHostPermission`
 - `permissions.canReadSelection`
 - `permissions.canReadPageContent`
 - `permissions.canReadMetadata`
@@ -1179,6 +1197,8 @@ Future implementation should manually verify:
 - Privileged and unsupported pages may still return active tab identity, but DOM extraction must fail or degrade visibly with `unsupported_page`.
 - Markdown output should favor readable, sanitized, source-faithful content over visual fidelity and must warn on degraded extraction.
 - Sanitized HTML scope is command-dependent: full/readable document content, selector subtree, or selected range, with the scope reported in `extraction.contentSource`.
+- Tab metadata fallback is marked with `contentSource: "tab-metadata"` and `domRead: false`; consumers must not treat title/URL fallback as page-content extraction.
+- Permission fields distinguish tab metadata availability from DOM access. `canReadActiveTab` is retained only as a legacy compatibility field and must not be interpreted as page-content access.
 
 ## Progress Log
 

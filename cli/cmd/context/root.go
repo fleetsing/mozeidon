@@ -105,17 +105,6 @@ func runContext(mode core.ContextMode, commandFlags contextCommandFlags) {
 		os.Exit(2)
 	}
 
-	if format == core.ContextFormatHTML {
-		writeJSON(core.NewContextError(
-			core.ContextOptions{Mode: mode, Format: format},
-			time.Now().UTC(),
-			"html_sanitizer_missing",
-			"HTML context output requires sanitizer support before it can be enabled.",
-			nil,
-		))
-		os.Exit(2)
-	}
-
 	app, err := core.NewAppWithProfile(flags.ProfileID)
 	if err != nil {
 		writeJSON(core.NewContextError(
@@ -126,6 +115,17 @@ func runContext(mode core.ContextMode, commandFlags contextCommandFlags) {
 			map[string]interface{}{"profileId": flags.ProfileID},
 		))
 		os.Exit(1)
+	}
+
+	if format == core.ContextFormatHTML {
+		writeJSON(core.NewContextError(
+			core.ContextOptions{Mode: mode, Format: format},
+			time.Now().UTC(),
+			"html_sanitizer_missing",
+			"HTML context output requires sanitizer support before it can be enabled.",
+			nil,
+		))
+		os.Exit(2)
 	}
 
 	exitCode := app.ContextJSON(core.ContextOptions{

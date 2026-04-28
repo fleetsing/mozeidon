@@ -61,6 +61,29 @@ type ContextOptions struct {
 	MaxBytes int
 }
 
+type ContextExtractionRequest struct {
+	Mode     ContextMode         `json:"mode"`
+	Format   ContextFormat       `json:"format"`
+	Selector string              `json:"selector,omitempty"`
+	Limits   ZenExtractionLimits `json:"limits"`
+}
+
+type ContextExtractionPayload struct {
+	OK           bool              `json:"ok"`
+	Status       ContextStatus     `json:"status,omitempty"`
+	Code         string            `json:"code,omitempty"`
+	Message      string            `json:"message,omitempty"`
+	Details      map[string]any    `json:"details,omitempty"`
+	Tab          models.Tab        `json:"tab"`
+	Window       models.Window     `json:"window"`
+	Page         ZenPageInfo       `json:"page"`
+	Content      *ZenContentInfo   `json:"content,omitempty"`
+	Metadata     *ZenMetadataInfo  `json:"metadata,omitempty"`
+	Extraction   ZenExtractionInfo `json:"extraction"`
+	Permissions  ZenPermissionInfo `json:"permissions"`
+	Capabilities ZenCapabilityInfo `json:"capabilities"`
+}
+
 type ZenContext struct {
 	Kind         string            `json:"kind"`
 	Version      int               `json:"version"`
@@ -146,11 +169,13 @@ type ZenContainerInfo struct {
 }
 
 type ZenPageInfo struct {
-	URL      string `json:"url"`
-	Title    string `json:"title"`
-	Domain   string `json:"domain"`
-	Favicon  string `json:"favicon,omitempty"`
-	Language string `json:"language,omitempty"`
+	URL          string `json:"url"`
+	Title        string `json:"title"`
+	Domain       string `json:"domain"`
+	Favicon      string `json:"favicon,omitempty"`
+	Language     string `json:"language,omitempty"`
+	CanonicalURL string `json:"canonicalUrl,omitempty"`
+	Referrer     string `json:"referrer,omitempty"`
 }
 
 type ZenContentInfo struct {
@@ -240,6 +265,7 @@ type ZenExtractionInfo struct {
 	SelectorMatched    *bool                  `json:"selectorMatched,omitempty"`
 	SelectorMatchCount *int                   `json:"selectorMatchCount,omitempty"`
 	ContentSource      string                 `json:"contentSource,omitempty"`
+	DOMRead            bool                   `json:"domRead"`
 	Warnings           []ZenExtractionWarning `json:"warnings"`
 	Limits             ZenExtractionLimits    `json:"limits"`
 	Truncation         ZenTruncationInfo      `json:"truncation"`
@@ -267,6 +293,10 @@ type ZenTruncationInfo struct {
 }
 
 type ZenPermissionInfo struct {
+	CanReadTabMetadata     bool     `json:"canReadTabMetadata"`
+	HasDOMAccess           bool     `json:"hasDomAccess"`
+	HasActiveTabGrant      bool     `json:"hasActiveTabGrant"`
+	HasHostPermission      bool     `json:"hasHostPermission"`
 	CanReadActiveTab       bool     `json:"canReadActiveTab"`
 	CanReadSelection       bool     `json:"canReadSelection"`
 	CanReadPageContent     bool     `json:"canReadPageContent"`
@@ -297,6 +327,21 @@ func (a *App) BuildContextPayload(options ContextOptions, capturedAt time.Time) 
 		return 2, NewContextError(options, capturedAt, "html_sanitizer_missing", "HTML context output requires sanitizer support before it can be enabled.", nil)
 	}
 
+	if payload, ok := a.ContextExtractionPayload(options); ok {
+		if !payload.OK {
+			code := payload.Code
+			if code == "" {
+				code = "internal_error"
+			}
+			message := payload.Message
+			if message == "" {
+				message = "Context extraction failed."
+			}
+			return contextExitCode(code), NewContextError(options, capturedAt, code, message, payload.Details)
+		}
+		return 0, NewContextFromExtractionPayload(payload, a.Profile, options, capturedAt)
+	}
+
 	tabs := <-a.TabsGet(false, false)
 	windows := <-a.WindowsGet()
 
@@ -318,6 +363,38 @@ func (a *App) BuildContextPayload(options ContextOptions, capturedAt time.Time) 
 	}
 
 	return 0, NewContextFromTab(activeTab, activeWindow, a.Profile, options, capturedAt)
+}
+
+func (a *App) ContextExtractionPayload(options ContextOptions) (ContextExtractionPayload, bool) {
+	request, err := json.Marshal(NewContextExtractionRequest(options))
+	if err != nil {
+		return ContextExtractionPayload{}, false
+	}
+
+	for result := range a.browser.Send(models.Command{
+		Command: "get-context",
+		Args:    string(request),
+	}) {
+		var envelope struct {
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(result.Data, &envelope); err != nil || len(envelope.Data) == 0 {
+			continue
+		}
+
+		var errorString string
+		if err := json.Unmarshal(envelope.Data, &errorString); err == nil {
+			continue
+		}
+
+		var payload ContextExtractionPayload
+		if err := json.Unmarshal(envelope.Data, &payload); err != nil {
+			continue
+		}
+		return payload, true
+	}
+
+	return ContextExtractionPayload{}, false
 }
 
 func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.Profile, options ContextOptions, capturedAt time.Time) ZenContext {
@@ -345,12 +422,7 @@ func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.P
 	}
 
 	if options.Mode == ContextModeSelection {
-		content = &ZenContentInfo{
-			Selection: &ZenSelectionContent{
-				IsCollapsed: true,
-				Source:      "none",
-			},
-		}
+		content = nil
 	}
 
 	metadata := contextMetadataForMode(options.Mode)
@@ -368,20 +440,8 @@ func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.P
 			Version: browserVersion(profile),
 		},
 		Profile: profileInfo(profile),
-		Window: ZenWindowInfo{
-			ID:          window.Id,
-			Focused:     window.IsLastFocused,
-			LastFocused: window.IsLastFocused,
-		},
-		Tab: ZenTabInfo{
-			ID:           tab.Id,
-			WindowID:     tab.WindowId,
-			Active:       tab.Active,
-			Pinned:       tab.Pinned,
-			Index:        tab.Index,
-			LastAccessed: tab.LastAccessed,
-			GroupID:      validPositiveID(tab.GroupId),
-		},
+		Window:  contextWindowInfo(window),
+		Tab:     contextTabInfo(tab),
 		Page: ZenPageInfo{
 			URL:    tab.Url,
 			Title:  tab.Title,
@@ -392,6 +452,75 @@ func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.P
 		Extraction:   contextExtraction(options, warnings, truncationFields),
 		Permissions:  contextPermissions(tab),
 		Capabilities: contextCapabilities(tab),
+	}
+}
+
+func NewContextExtractionRequest(options ContextOptions) ContextExtractionRequest {
+	options = normalizeContextOptions(options)
+	return ContextExtractionRequest{
+		Mode:     options.Mode,
+		Format:   options.Format,
+		Selector: options.Selector,
+		Limits:   contextLimits(options),
+	}
+}
+
+func NewContextFromExtractionPayload(payload ContextExtractionPayload, profile *profiles.Profile, options ContextOptions, capturedAt time.Time) ZenContext {
+	options = normalizeContextOptions(options)
+	status := payload.Status
+	if status == "" {
+		status = ContextStatusOK
+		if len(payload.Extraction.Warnings) > 0 || payload.Extraction.Truncation.Truncated {
+			status = ContextStatusPartial
+		}
+	}
+
+	page := payload.Page
+	if page.URL == "" {
+		page.URL = payload.Tab.Url
+	}
+	if page.Title == "" {
+		page.Title = payload.Tab.Title
+	}
+	if page.Domain == "" {
+		page.Domain = pageDomain(payload.Tab)
+	}
+
+	extraction := payload.Extraction
+	if extraction.Mode == "" {
+		extraction.Mode = options.Mode
+	}
+	if extraction.Limits.MaxBytes == 0 {
+		extraction.Limits = contextLimits(options)
+	}
+	if extraction.Warnings == nil {
+		extraction.Warnings = []ZenExtractionWarning{}
+	}
+	if extraction.Truncation.Fields == nil {
+		extraction.Truncation.Fields = []string{}
+	}
+
+	return ZenContext{
+		Kind:       ContextKind,
+		Version:    ContextVersion,
+		OK:         true,
+		Status:     status,
+		Source:     contextSource(options, profile),
+		CapturedAt: capturedAt.Format(time.RFC3339Nano),
+		Browser: ZenBrowserInfo{
+			Name:    "Zen Browser",
+			AppID:   "app.zen-browser.zen",
+			Version: browserVersion(profile),
+		},
+		Profile:      profileInfo(profile),
+		Window:       contextWindowInfo(payload.Window),
+		Tab:          contextTabInfo(payload.Tab),
+		Page:         page,
+		Content:      payload.Content,
+		Metadata:     payload.Metadata,
+		Extraction:   extraction,
+		Permissions:  payload.Permissions,
+		Capabilities: payload.Capabilities,
 	}
 }
 
@@ -471,6 +600,19 @@ func ContextUsageError(mode ContextMode, format string, capturedAt time.Time) Ze
 	)
 }
 
+func contextExitCode(code string) int {
+	switch code {
+	case "invalid_format", "selector_invalid", "selector_unsupported", "html_sanitizer_missing":
+		return 2
+	case "permission_denied", "unsupported_page":
+		return 3
+	case "no_active_window", "no_active_tab":
+		return 4
+	default:
+		return 1
+	}
+}
+
 func contextWarningsForMode(mode ContextMode) []ZenExtractionWarning {
 	switch mode {
 	case ContextModeSelection:
@@ -522,39 +664,26 @@ func contextContentForFormat(tab models.Tab, format ContextFormat, maxBytes int)
 func contextMetadataForMode(mode ContextMode) *ZenMetadataInfo {
 	switch mode {
 	case ContextModeMetadata:
-		return &ZenMetadataInfo{
-			OpenGraph: map[string]interface{}{},
-			JSONLD: &ZenJSONLDInfo{
-				Raw:     []interface{}{},
-				Summary: []ZenJSONLDSummary{},
-			},
-			Headings: []ZenHeading{},
-			Links:    []ZenLink{},
-			Images:   []ZenImage{},
-		}
+		return nil
 	case ContextModeLinks:
-		return &ZenMetadataInfo{
-			Links: []ZenLink{},
-		}
+		return nil
 	default:
 		return nil
 	}
 }
 
 func contextExtraction(options ContextOptions, warnings []ZenExtractionWarning, truncationFields []string) ZenExtractionInfo {
+	contentSource := ""
+	if options.Mode == ContextModeActive && (options.Format == ContextFormatText || options.Format == ContextFormatMarkdown) {
+		contentSource = "tab-metadata"
+	}
 	return ZenExtractionInfo{
-		Mode:     options.Mode,
-		Selector: options.Selector,
-		Warnings: warnings,
-		Limits: ZenExtractionLimits{
-			MaxBytes:         options.MaxBytes,
-			MaxTextBytes:     DefaultTextBytes,
-			MaxHTMLBytes:     DefaultHTMLBytes,
-			MaxMarkdownBytes: DefaultMarkdownMax,
-			MaxLinks:         DefaultMaxLinks,
-			MaxImages:        DefaultMaxImages,
-			MaxJSONLDBytes:   DefaultJSONLDBytes,
-		},
+		Mode:          options.Mode,
+		Selector:      options.Selector,
+		ContentSource: contentSource,
+		DOMRead:       false,
+		Warnings:      warnings,
+		Limits:        contextLimits(options),
 		Truncation: ZenTruncationInfo{
 			Truncated: len(truncationFields) > 0,
 			Fields:    truncationFields,
@@ -562,10 +691,27 @@ func contextExtraction(options ContextOptions, warnings []ZenExtractionWarning, 
 	}
 }
 
+func contextLimits(options ContextOptions) ZenExtractionLimits {
+	options = normalizeContextOptions(options)
+	return ZenExtractionLimits{
+		MaxBytes:         options.MaxBytes,
+		MaxTextBytes:     DefaultTextBytes,
+		MaxHTMLBytes:     DefaultHTMLBytes,
+		MaxMarkdownBytes: DefaultMarkdownMax,
+		MaxLinks:         DefaultMaxLinks,
+		MaxImages:        DefaultMaxImages,
+		MaxJSONLDBytes:   DefaultJSONLDBytes,
+	}
+}
+
 func contextPermissions(tab models.Tab) ZenPermissionInfo {
 	if isUnsupportedContextURL(tab.Url) {
 		return ZenPermissionInfo{
-			CanReadActiveTab:   true,
+			CanReadTabMetadata: true,
+			HasDOMAccess:       false,
+			HasActiveTabGrant:  false,
+			HasHostPermission:  false,
+			CanReadActiveTab:   false,
 			CanReadSelection:   false,
 			CanReadPageContent: false,
 			CanReadMetadata:    false,
@@ -573,13 +719,37 @@ func contextPermissions(tab models.Tab) ZenPermissionInfo {
 		}
 	}
 	return ZenPermissionInfo{
-		CanReadActiveTab:       true,
+		CanReadTabMetadata:     true,
+		HasDOMAccess:           false,
+		HasActiveTabGrant:      false,
+		HasHostPermission:      false,
+		CanReadActiveTab:       false,
 		CanReadSelection:       false,
 		CanReadPageContent:     false,
 		CanReadMetadata:        false,
 		CanReadLinks:           false,
 		RequiresHostPermission: true,
 		Missing:                []string{"host_permission"},
+	}
+}
+
+func contextWindowInfo(window models.Window) ZenWindowInfo {
+	return ZenWindowInfo{
+		ID:          window.Id,
+		Focused:     window.IsLastFocused,
+		LastFocused: window.IsLastFocused,
+	}
+}
+
+func contextTabInfo(tab models.Tab) ZenTabInfo {
+	return ZenTabInfo{
+		ID:           tab.Id,
+		WindowID:     tab.WindowId,
+		Active:       tab.Active,
+		Pinned:       tab.Pinned,
+		Index:        tab.Index,
+		LastAccessed: tab.LastAccessed,
+		GroupID:      validPositiveID(tab.GroupId),
 	}
 }
 
@@ -702,6 +872,8 @@ func isUnsupportedContextURL(rawURL string) bool {
 	switch strings.ToLower(parsedURL.Scheme) {
 	case "http", "https":
 		return false
+	case "about":
+		return !strings.EqualFold(parsedURL.Opaque, "blank") && !strings.EqualFold(parsedURL.Path, "blank")
 	default:
 		return true
 	}

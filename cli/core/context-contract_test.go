@@ -57,6 +57,9 @@ func TestNewContextFromTabBuildsContractJSON(t *testing.T) {
 	if context.Permissions.CanReadPageContent {
 		t.Fatal("expected page-content permission to be unavailable")
 	}
+	if !context.Permissions.CanReadTabMetadata || context.Permissions.HasDOMAccess {
+		t.Fatalf("expected tab metadata without DOM access, got %#v", context.Permissions)
+	}
 	if context.Capabilities.PageContent != "permission-required" {
 		t.Fatalf("expected pageContent permission-required, got %s", context.Capabilities.PageContent)
 	}
@@ -123,6 +126,9 @@ func TestContextFormatTextPopulatesStructuredText(t *testing.T) {
 	if context.Source.Output != ContextOutputJSON {
 		t.Fatalf("expected structured JSON output, got %s", context.Source.Output)
 	}
+	if context.Extraction.ContentSource != "tab-metadata" || context.Extraction.DOMRead {
+		t.Fatalf("expected text fallback to be marked as tab metadata without DOM read, got %#v", context.Extraction)
+	}
 }
 
 func TestContextGeneratedTextRespectsMaxBytes(t *testing.T) {
@@ -184,34 +190,144 @@ func TestContextReportsUnsupportedPage(t *testing.T) {
 	if context.Capabilities.PageContent != "unavailable" {
 		t.Fatalf("expected pageContent unavailable, got %s", context.Capabilities.PageContent)
 	}
-	if context.Permissions.RequiresHostPermission {
-		t.Fatalf("did not expect host permission to make unsupported page readable, got %#v", context.Permissions)
+	if !context.Permissions.CanReadTabMetadata || context.Permissions.HasDOMAccess || context.Permissions.CanReadActiveTab {
+		t.Fatalf("expected unsupported page to expose tab metadata without DOM access, got %#v", context.Permissions)
 	}
 	if context.Content == nil || context.Content.Markdown == nil {
 		t.Fatal("expected title/URL markdown context to remain available")
 	}
 }
 
-func TestContextMetadataIncludesJSONLDRawAndSummaryFields(t *testing.T) {
+func TestContextDoesNotTreatAboutBlankAsUnsupported(t *testing.T) {
 	context := NewContextFromTab(
-		models.Tab{Id: 123, WindowId: 456, Url: "https://example.com", Title: "Example", Active: true},
+		models.Tab{
+			Id:       123,
+			WindowId: 456,
+			Url:      "about:blank",
+			Title:    "Blank Page",
+			Active:   true,
+		},
 		models.Window{Id: 456, IsLastFocused: true},
 		nil,
-		ContextOptions{Mode: ContextModeMetadata},
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatText},
+		time.Date(2026, 4, 28, 9, 45, 0, 0, time.UTC),
+	)
+
+	if hasWarning(context.Extraction.Warnings, "unsupported_page") {
+		t.Fatalf("did not expect about:blank to be marked unsupported, got %#v", context.Extraction.Warnings)
+	}
+	if context.Capabilities.PageContent != "permission-required" {
+		t.Fatalf("expected about:blank to remain permission-gated, got %s", context.Capabilities.PageContent)
+	}
+}
+
+func TestNewContextExtractionRequestIncludesLimitsAndSelector(t *testing.T) {
+	request := NewContextExtractionRequest(ContextOptions{
+		Mode:     ContextModeActive,
+		Format:   ContextFormatMarkdown,
+		Selector: "main article",
+		MaxBytes: 1234,
+	})
+
+	if request.Mode != ContextModeActive || request.Format != ContextFormatMarkdown {
+		t.Fatalf("unexpected request mode/format: %#v", request)
+	}
+	if request.Selector != "main article" {
+		t.Fatalf("expected selector to be preserved, got %q", request.Selector)
+	}
+	if request.Limits.MaxBytes != 1234 {
+		t.Fatalf("expected custom maxBytes, got %#v", request.Limits)
+	}
+	if request.Limits.MaxTextBytes != DefaultTextBytes || request.Limits.MaxMarkdownBytes != DefaultMarkdownMax {
+		t.Fatalf("expected default field limits, got %#v", request.Limits)
+	}
+}
+
+func TestNewContextFromExtractionPayloadMapsContentAndMetadata(t *testing.T) {
+	payload := ContextExtractionPayload{
+		OK:     true,
+		Status: ContextStatusPartial,
+		Tab: models.Tab{
+			Id:       123,
+			WindowId: 456,
+			Url:      "https://example.com/page",
+			Title:    "Example",
+			Active:   true,
+		},
+		Window: models.Window{Id: 456, IsLastFocused: true},
+		Page: ZenPageInfo{
+			URL:          "https://example.com/page",
+			Title:        "Example",
+			Domain:       "example.com",
+			Language:     "en",
+			CanonicalURL: "https://example.com/page",
+		},
+		Content: &ZenContentInfo{
+			Text: &ZenTextContent{Value: "Readable page", Length: 13},
+		},
+		Metadata: &ZenMetadataInfo{
+			OpenGraph: map[string]interface{}{"og:title": "Example"},
+			JSONLD: &ZenJSONLDInfo{
+				Raw:     []interface{}{map[string]interface{}{"@type": "Article"}},
+				Summary: []ZenJSONLDSummary{{Type: "Article", Headline: "Example"}},
+			},
+			Links: []ZenLink{{Text: "Docs", Href: "https://example.com/docs", Kind: "anchor"}},
+		},
+		Extraction: ZenExtractionInfo{
+			Mode:          ContextModeActive,
+			ContentSource: "document",
+			DOMRead:       true,
+			Warnings: []ZenExtractionWarning{{
+				Code:    "content_truncated",
+				Message: "Content was truncated.",
+				Field:   "content.text",
+			}},
+			Limits:     contextLimits(ContextOptions{MaxBytes: 42}),
+			Truncation: ZenTruncationInfo{Truncated: true, Fields: []string{"content.text"}},
+		},
+		Permissions: ZenPermissionInfo{
+			CanReadTabMetadata: true,
+			HasDOMAccess:       true,
+			HasHostPermission:  true,
+			CanReadPageContent: true,
+		},
+		Capabilities: ZenCapabilityInfo{
+			ActiveTab:   "available",
+			PageContent: "available",
+			Selection:   "available",
+			Metadata:    "available",
+			Links:       "available",
+		},
+	}
+	profile := &profiles.Profile{ProfileId: "Zen", ProfileAlias: "Personal"}
+
+	context := NewContextFromExtractionPayload(
+		payload,
+		profile,
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatText},
 		time.Date(2026, 4, 28, 9, 45, 0, 0, time.UTC),
 	)
 
 	if context.Status != ContextStatusPartial {
-		t.Fatalf("expected partial metadata status, got %s", context.Status)
+		t.Fatalf("expected payload status to be preserved, got %s", context.Status)
 	}
-	if context.Metadata == nil || context.Metadata.JSONLD == nil {
-		t.Fatal("expected JSON-LD metadata object")
+	if context.Source.ProfileID != "Zen" || context.Source.ProfileAlias != "Personal" {
+		t.Fatalf("expected source profile fields, got %#v", context.Source)
 	}
-	if context.Metadata.JSONLD.Raw == nil || context.Metadata.JSONLD.Summary == nil {
-		t.Fatalf("expected raw and summary JSON-LD slices, got %#v", context.Metadata.JSONLD)
+	if context.Page.CanonicalURL != "https://example.com/page" || context.Page.Language != "en" {
+		t.Fatalf("expected page metadata to map, got %#v", context.Page)
 	}
-	if len(context.Extraction.Warnings) != 1 || context.Extraction.Warnings[0].Code != "permission_unavailable" {
-		t.Fatalf("expected permission warning, got %#v", context.Extraction.Warnings)
+	if context.Content == nil || context.Content.Text == nil || context.Content.Text.Value != "Readable page" {
+		t.Fatalf("expected text content to map, got %#v", context.Content)
+	}
+	if context.Metadata == nil || context.Metadata.JSONLD == nil || len(context.Metadata.JSONLD.Raw) != 1 {
+		t.Fatalf("expected metadata to map, got %#v", context.Metadata)
+	}
+	if !context.Extraction.Truncation.Truncated || !hasWarning(context.Extraction.Warnings, "content_truncated") {
+		t.Fatalf("expected truncation metadata and warning, got %#v", context.Extraction)
+	}
+	if !context.Extraction.DOMRead || context.Extraction.ContentSource != "document" {
+		t.Fatalf("expected DOM extraction metadata to map, got %#v", context.Extraction)
 	}
 
 	var marshaled map[string]interface{}
@@ -229,6 +345,48 @@ func TestContextMetadataIncludesJSONLDRawAndSummaryFields(t *testing.T) {
 	}
 	if _, ok := jsonLD["summary"].([]interface{}); !ok {
 		t.Fatalf("expected metadata.jsonLd.summary array in serialized JSON, got %#v", jsonLD["summary"])
+	}
+}
+
+func TestContextMetadataFallbackOmitsEmptyMetadataWhenPermissionUnavailable(t *testing.T) {
+	for _, mode := range []ContextMode{ContextModeMetadata, ContextModeLinks} {
+		context := NewContextFromTab(
+			models.Tab{Id: 123, WindowId: 456, Url: "https://example.com", Title: "Example", Active: true},
+			models.Window{Id: 456, IsLastFocused: true},
+			nil,
+			ContextOptions{Mode: mode},
+			time.Date(2026, 4, 28, 9, 45, 0, 0, time.UTC),
+		)
+
+		if context.Status != ContextStatusPartial {
+			t.Fatalf("expected partial %s status, got %s", mode, context.Status)
+		}
+		if context.Metadata != nil {
+			t.Fatalf("did not expect empty metadata for %s when permission is unavailable, got %#v", mode, context.Metadata)
+		}
+		if len(context.Extraction.Warnings) != 1 || context.Extraction.Warnings[0].Code != "permission_unavailable" {
+			t.Fatalf("expected permission warning for %s, got %#v", mode, context.Extraction.Warnings)
+		}
+	}
+}
+
+func TestContextSelectionFallbackOmitsCollapsedStateWhenPermissionUnavailable(t *testing.T) {
+	context := NewContextFromTab(
+		models.Tab{Id: 123, WindowId: 456, Url: "https://example.com", Title: "Example", Active: true},
+		models.Window{Id: 456, IsLastFocused: true},
+		nil,
+		ContextOptions{Mode: ContextModeSelection},
+		time.Date(2026, 4, 28, 9, 45, 0, 0, time.UTC),
+	)
+
+	if context.Status != ContextStatusPartial {
+		t.Fatalf("expected partial selection status, got %s", context.Status)
+	}
+	if context.Content != nil {
+		t.Fatalf("did not expect collapsed selection fallback when permission is unavailable, got %#v", context.Content)
+	}
+	if len(context.Extraction.Warnings) != 1 || context.Extraction.Warnings[0].Code != "permission_unavailable" {
+		t.Fatalf("expected permission warning, got %#v", context.Extraction.Warnings)
 	}
 }
 
