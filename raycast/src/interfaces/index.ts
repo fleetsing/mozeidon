@@ -59,6 +59,7 @@ export interface MozeidonBookmark {
 export interface TabState {
   type: TAB_TYPE;
   tabs: Tab[];
+  groups?: TabGroup[];
 }
 
 export interface TabGroup {

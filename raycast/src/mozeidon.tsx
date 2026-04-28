@@ -9,7 +9,7 @@ export default function Command(): ReactElement {
   const [searchText, setSearchText] = useState<string>("");
   const [
     {
-      data: { tabs, type },
+      data: { groups, tabs, type },
       isLoading,
       errorView,
     },
@@ -60,6 +60,9 @@ export default function Command(): ReactElement {
                     })
                 : undefined
             }
+            groups={groups ?? []}
+            tabs={tabs}
+            onRefreshOpenTabs={type === TAB_TYPE.OPENED_TABS ? () => changeTabType(TAB_TYPE.OPENED_TABS) : undefined}
           />
         ))}
       </List.Section>
