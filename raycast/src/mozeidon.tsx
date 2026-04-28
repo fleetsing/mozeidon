@@ -66,6 +66,24 @@ export default function Command(): ReactElement {
             groups={groups ?? []}
             lastTabIndexByWindow={lastTabIndexByWindow}
             onRefreshOpenTabs={type === TAB_TYPE.OPENED_TABS ? () => changeTabType(TAB_TYPE.OPENED_TABS) : undefined}
+            onDeleteBookmark={
+              type === TAB_TYPE.BOOKMARKS
+                ? () =>
+                    setData({
+                      type: TAB_TYPE.BOOKMARKS,
+                      tabs: tabs.filter((t) => t.id !== tab.id),
+                    })
+                : undefined
+            }
+            onUpdateBookmark={
+              type === TAB_TYPE.BOOKMARKS
+                ? (updatedTab) =>
+                    setData({
+                      type: TAB_TYPE.BOOKMARKS,
+                      tabs: tabs.map((t) => (t.id === tab.id ? updatedTab : t)),
+                    })
+                : undefined
+            }
           />
         ))}
       </List.Section>

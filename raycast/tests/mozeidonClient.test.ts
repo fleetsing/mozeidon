@@ -4,6 +4,13 @@ import type { ChildProcessWithoutNullStreams, ExecFileSyncOptionsWithStringEncod
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { TAB_TYPE } from "../src/tabTypes";
+import {
+  buildCreateBookmarkArgs,
+  buildDeleteBookmarkArgs,
+  buildUpdateBookmarkArgs,
+  getAvailableBookmarkActionIds,
+  validateBookmarkFolderPath,
+} from "../src/bookmarkCommands";
 import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../src/historyCommands";
 import { mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
 import {
@@ -110,11 +117,150 @@ test("buildMozeidonArgs applies profile support to representative commands", () 
       command: ["history", "delete", "--url", "https://example.com/page"],
       expected: ["--profile-id", "Zen", "history", "delete", "--url", "https://example.com/page"],
     },
+    {
+      command: ["bookmark", "new", "--title", "Example", "--url", "https://example.com"],
+      expected: ["--profile-id", "Zen", "bookmark", "new", "--title", "Example", "--url", "https://example.com"],
+    },
+    {
+      command: ["bookmark", "update", "bookmark-1", "--title", "Updated"],
+      expected: ["--profile-id", "Zen", "bookmark", "update", "bookmark-1", "--title", "Updated"],
+    },
+    {
+      command: ["bookmark", "delete", "bookmark-1"],
+      expected: ["--profile-id", "Zen", "bookmark", "delete", "bookmark-1"],
+    },
   ];
 
   for (const testCase of cases) {
     assert.deepEqual(buildMozeidonArgs(testCase.command, { profileId: "Zen" }), testCase.expected);
   }
+});
+
+test("bookmark command builders use current CLI command shapes", () => {
+  assert.deepEqual(buildCreateBookmarkArgs({ title: " Example ", url: " https://example.com " }), [
+    "bookmark",
+    "new",
+    "--title",
+    "Example",
+    "--url",
+    "https://example.com",
+  ]);
+  assert.deepEqual(
+    buildCreateBookmarkArgs({ title: "Example", url: "https://example.com", folderPath: " /Development/ " }),
+    ["bookmark", "new", "--title", "Example", "--url", "https://example.com", "--folder-path", "/Development/"],
+  );
+  assert.deepEqual(buildUpdateBookmarkArgs({ id: " bookmark-1 ", title: " Updated " }), [
+    "bookmark",
+    "update",
+    "bookmark-1",
+    "--title",
+    "Updated",
+  ]);
+  assert.deepEqual(buildUpdateBookmarkArgs({ id: "bookmark-1", url: " https://example.org " }), [
+    "bookmark",
+    "update",
+    "bookmark-1",
+    "--url",
+    "https://example.org",
+  ]);
+  assert.deepEqual(buildUpdateBookmarkArgs({ id: "bookmark-1", folderPath: " /Work/ " }), [
+    "bookmark",
+    "update",
+    "bookmark-1",
+    "--folder-path",
+    "/Work/",
+  ]);
+  assert.deepEqual(buildUpdateBookmarkArgs({ id: "bookmark-1", title: "Updated", url: "https://example.org" }), [
+    "bookmark",
+    "update",
+    "bookmark-1",
+    "--title",
+    "Updated",
+    "--url",
+    "https://example.org",
+  ]);
+  assert.equal(buildUpdateBookmarkArgs({ id: "bookmark-1", title: " ", url: "", folderPath: " " }), undefined);
+  assert.deepEqual(buildDeleteBookmarkArgs({ id: " bookmark-1 " }), ["bookmark", "delete", "bookmark-1"]);
+});
+
+test("bookmark folder path validation accepts empty or slash-wrapped paths", () => {
+  assert.equal(validateBookmarkFolderPath(undefined), undefined);
+  assert.equal(validateBookmarkFolderPath(""), undefined);
+  assert.equal(validateBookmarkFolderPath("   "), undefined);
+  assert.equal(validateBookmarkFolderPath("/"), undefined);
+  assert.equal(validateBookmarkFolderPath("/Work/"), undefined);
+  assert.equal(validateBookmarkFolderPath("Work/"), "Folder path must start and end with `/`.");
+  assert.equal(validateBookmarkFolderPath("/Work"), "Folder path must start and end with `/`.");
+});
+
+test("bookmark action availability is scoped to opened tabs and bookmarks", () => {
+  const openedTab = createTab({ url: "https://example.com" });
+  const invalidOpenedTab = createTab({ url: "" });
+  const bookmark = createTab({ id: "bookmark-1", windowId: 0, active: false });
+
+  assert.deepEqual(getAvailableBookmarkActionIds(TAB_TYPE.OPENED_TABS, openedTab), ["addBookmark"]);
+  assert.deepEqual(getAvailableBookmarkActionIds(TAB_TYPE.OPENED_TABS, invalidOpenedTab), []);
+  assert.deepEqual(getAvailableBookmarkActionIds(TAB_TYPE.BOOKMARKS, bookmark), ["editBookmark", "deleteBookmark"]);
+  assert.deepEqual(getAvailableBookmarkActionIds(TAB_TYPE.RECENTLY_CLOSED, openedTab), []);
+});
+
+test("bookmark inputs remain child process args", () => {
+  const calls: Array<{ file: string; args: string[]; options: ExecFileSyncOptionsWithStringEncoding }> = [];
+  const unsafeTitle = 'Example"; echo unsafe; $(whoami)';
+  const unsafeUrl = 'https://example.com/a"; rm -rf /; $(whoami)';
+  const unsafeFolderPath = '/Work"; echo unsafe/';
+  const unsafeId = 'bookmark-1"; echo unsafe';
+  const execFile = (file: string, args: readonly string[], options: ExecFileSyncOptionsWithStringEncoding): string => {
+    calls.push({ file, args: [...args], options });
+    return "";
+  };
+
+  runMozeidon(buildCreateBookmarkArgs({ title: unsafeTitle, url: unsafeUrl, folderPath: unsafeFolderPath }), {
+    executable: "mozeidon",
+    execFile,
+  });
+  runMozeidon(
+    buildUpdateBookmarkArgs({
+      id: unsafeId,
+      title: unsafeTitle,
+      url: unsafeUrl,
+      folderPath: unsafeFolderPath,
+    })!,
+    {
+      executable: "mozeidon",
+      execFile,
+    },
+  );
+  runMozeidon(buildDeleteBookmarkArgs({ id: unsafeId }), {
+    executable: "mozeidon",
+    execFile,
+  });
+
+  assert.deepEqual(calls[0].args, [
+    "bookmark",
+    "new",
+    "--title",
+    unsafeTitle,
+    "--url",
+    unsafeUrl,
+    "--folder-path",
+    unsafeFolderPath,
+  ]);
+  assert.deepEqual(calls[1].args, [
+    "bookmark",
+    "update",
+    unsafeId,
+    "--title",
+    unsafeTitle,
+    "--url",
+    unsafeUrl,
+    "--folder-path",
+    unsafeFolderPath,
+  ]);
+  assert.deepEqual(calls[2].args, ["bookmark", "delete", unsafeId]);
+  assert.equal("shell" in calls[0].options, false);
+  assert.equal("shell" in calls[1].options, false);
+  assert.equal("shell" in calls[2].options, false);
 });
 
 test("history command builders use safe CLI argument shapes", () => {

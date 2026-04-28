@@ -35,6 +35,8 @@ import {
   buildUngroupTabArgs,
   buildUnpinTabArgs,
 } from "../tabActionCommands";
+import { buildCreateBookmarkArgs, buildDeleteBookmarkArgs, buildUpdateBookmarkArgs } from "../bookmarkCommands";
+import type { CreateBookmarkInput, UpdateBookmarkInput } from "../bookmarkCommands";
 import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../historyCommands";
 import { mapMozeidonHistoryItemsToHistoryItems, MozeidonHistoryPayload } from "../historyMappers";
 
@@ -91,6 +93,21 @@ export function fetchHistory(): HistoryItem[] {
 
 export function deleteHistoryItem(item: Pick<HistoryItem, "url">): void {
   runMozeidon(buildDeleteHistoryItemArgs(item), getMozeidonOptions());
+}
+
+export function createBookmark(input: CreateBookmarkInput): void {
+  runMozeidon(buildCreateBookmarkArgs(input), getMozeidonOptions());
+}
+
+export function updateBookmark(input: UpdateBookmarkInput): boolean {
+  const args = buildUpdateBookmarkArgs(input);
+  if (!args) return false;
+  runMozeidon(args, getMozeidonOptions());
+  return true;
+}
+
+export function deleteBookmark(bookmark: Pick<Tab, "id">): void {
+  runMozeidon(buildDeleteBookmarkArgs(bookmark), getMozeidonOptions());
 }
 
 export function fetchOpenTabs(): TabState {

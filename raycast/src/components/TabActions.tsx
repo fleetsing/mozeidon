@@ -1,6 +1,20 @@
-import { Action, ActionPanel, closeMainWindow, Icon, PopToRootType, showToast, Toast } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Alert,
+  closeMainWindow,
+  confirmAlert,
+  Form,
+  Icon,
+  PopToRootType,
+  showToast,
+  Toast,
+  useNavigation,
+} from "@raycast/api";
 import {
   closeTab,
+  createBookmark,
+  deleteBookmark,
   duplicateTab,
   moveTabToEnd,
   moveTabToGroup,
@@ -10,9 +24,11 @@ import {
   switchTab,
   ungroupTab,
   unpinTab,
+  updateBookmark,
 } from "../actions";
 import { TAB_TYPE } from "../constants";
 import { Tab, TabGroup } from "../interfaces";
+import { getAvailableBookmarkActionIds, validateBookmarkFolderPath } from "../bookmarkCommands";
 import {
   formatTabGroupTitle,
   getAvailableTabActionIds,
@@ -42,13 +58,33 @@ function OpenTabListItemAction(props: {
   groups: TabGroup[];
   lastTabIndexByWindow: Map<number, number>;
   onRefreshOpenTabs: (() => Promise<void>) | undefined;
+  onDeleteBookmark: (() => void) | undefined;
+  onUpdateBookmark: ((tab: Tab) => void) | undefined;
 }) {
-  const { groups, isLoading, lastTabIndexByWindow, onCloseTab, onRefreshOpenTabs, tab, type } = props;
+  const {
+    groups,
+    isLoading,
+    lastTabIndexByWindow,
+    onCloseTab,
+    onDeleteBookmark,
+    onRefreshOpenTabs,
+    onUpdateBookmark,
+    tab,
+    type,
+  } = props;
   const availableActions = getAvailableTabActionIds(type, tab, groups, lastTabIndexByWindow);
+  const availableBookmarkActions = getAvailableBookmarkActionIds(type, tab);
 
   return (
     <ActionPanel title={tab.title}>
       <GoToOpenTabAction tab={tab} type={type} isLoading={isLoading} />
+      {availableBookmarkActions.includes("addBookmark") ? <AddBookmarkAction tab={tab} /> : undefined}
+      {availableBookmarkActions.includes("editBookmark") ? (
+        <EditBookmarkAction tab={tab} onUpdateBookmark={onUpdateBookmark} />
+      ) : undefined}
+      {availableBookmarkActions.includes("deleteBookmark") ? (
+        <DeleteBookmarkAction tab={tab} onDeleteBookmark={onDeleteBookmark} />
+      ) : undefined}
       {availableActions.includes("pin") ? <PinTabAction tab={tab} onRefreshOpenTabs={onRefreshOpenTabs} /> : undefined}
       {availableActions.includes("unpin") ? (
         <UnpinTabAction tab={tab} onRefreshOpenTabs={onRefreshOpenTabs} />
@@ -85,6 +121,65 @@ function CloseTabAction(props: { tab: Tab; onCloseTab: () => void }) {
     });
   }
   return <Action title="Close Tab" icon={{ source: Icon.XMarkCircle }} onAction={handleAction} />;
+}
+
+function AddBookmarkAction(props: { tab: Tab }) {
+  return (
+    <Action.Push
+      title={props.tab.active ? "Add Current Tab Bookmark" : "Add Bookmark"}
+      icon={{ source: Icon.Bookmark }}
+      target={<BookmarkForm mode="create" tab={props.tab} />}
+    />
+  );
+}
+
+function EditBookmarkAction(props: { tab: Tab; onUpdateBookmark: ((tab: Tab) => void) | undefined }) {
+  return (
+    <Action.Push
+      title="Edit Bookmark"
+      icon={{ source: Icon.Pencil }}
+      target={<BookmarkForm mode="edit" tab={props.tab} onUpdateBookmark={props.onUpdateBookmark} />}
+    />
+  );
+}
+
+function DeleteBookmarkAction(props: { tab: Tab; onDeleteBookmark: (() => void) | undefined }) {
+  async function handleAction() {
+    const confirmed = await confirmAlert({
+      title: "Delete Bookmark?",
+      message: `${props.tab.title}\n${props.tab.url}`,
+      primaryAction: {
+        title: "Delete",
+        style: Alert.ActionStyle.Destructive,
+      },
+    });
+
+    if (!confirmed) return;
+
+    try {
+      deleteBookmark(props.tab);
+      props.onDeleteBookmark?.();
+      await showToast({
+        title: "Deleted Bookmark",
+        style: Toast.Style.Success,
+      });
+    } catch (error) {
+      await showToast({
+        title: "Failed to Delete Bookmark",
+        message: error instanceof Error ? error.message : undefined,
+        style: Toast.Style.Failure,
+      });
+    }
+  }
+
+  return (
+    <Action
+      title="Delete Bookmark"
+      icon={{ source: Icon.Trash }}
+      style={Action.Style.Destructive}
+      onAction={handleAction}
+    />
+  );
 }
 
 function PinTabAction(props: { tab: Tab; onRefreshOpenTabs: (() => Promise<void>) | undefined }) {
@@ -239,6 +334,115 @@ function OpenNewTabAction(props: { query: string }) {
   return <Action onAction={handleAction} title={props.query ? `Search "${props.query}"` : "Open Empty Tab"} />;
 }
 
+type BookmarkFormValues = {
+  title: string;
+  url: string;
+  folderPath: string;
+};
+
+function BookmarkForm(props: { mode: "create" | "edit"; tab: Tab; onUpdateBookmark?: (tab: Tab) => void }) {
+  const { pop } = useNavigation();
+
+  async function handleSubmit(values: BookmarkFormValues) {
+    const requiredFieldError = validateBookmarkRequiredFields(values);
+    if (requiredFieldError) {
+      await showToast({
+        title: "Invalid Bookmark",
+        message: requiredFieldError,
+        style: Toast.Style.Failure,
+      });
+      return false;
+    }
+
+    const folderPathError = validateBookmarkFolderPath(values.folderPath);
+    if (folderPathError) {
+      await showToast({
+        title: "Invalid Folder Path",
+        message: folderPathError,
+        style: Toast.Style.Failure,
+      });
+      return false;
+    }
+
+    try {
+      if (props.mode === "create") {
+        createBookmark({
+          title: values.title,
+          url: values.url,
+          folderPath: values.folderPath,
+        });
+        await showToast({
+          title: "Added Bookmark",
+          style: Toast.Style.Success,
+        });
+      } else {
+        const updated = updateBookmark({
+          id: props.tab.id,
+          title: getChangedValue(props.tab.title, values.title),
+          url: getChangedValue(props.tab.url, values.url),
+          folderPath: values.folderPath,
+        });
+
+        if (!updated) {
+          await showToast({
+            title: "No Bookmark Changes",
+            style: Toast.Style.Success,
+          });
+          return false;
+        }
+
+        props.onUpdateBookmark?.(
+          new Tab(
+            props.tab.id,
+            props.tab.pinned,
+            props.tab.windowId,
+            values.title.trim(),
+            values.url.trim(),
+            props.tab.domain,
+            props.tab.active,
+            props.tab.groupId,
+            props.tab.group,
+            props.tab.index,
+            props.tab.lastAccessed,
+          ),
+        );
+        await showToast({
+          title: "Updated Bookmark",
+          style: Toast.Style.Success,
+        });
+      }
+
+      pop();
+    } catch (error) {
+      await showToast({
+        title: props.mode === "create" ? "Failed to Add Bookmark" : "Failed to Update Bookmark",
+        message: error instanceof Error ? error.message : undefined,
+        style: Toast.Style.Failure,
+      });
+      return false;
+    }
+  }
+
+  return (
+    <Form
+      navigationTitle={props.mode === "create" ? "Add Bookmark" : "Edit Bookmark"}
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title={props.mode === "create" ? "Add Bookmark" : "Update Bookmark"}
+            icon={{ source: props.mode === "create" ? Icon.Bookmark : Icon.Pencil }}
+            onSubmit={handleSubmit}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField id="title" title="Title" defaultValue={props.tab.title} />
+      <Form.TextField id="url" title="URL" defaultValue={props.tab.url} />
+      <Form.TextField id="folderPath" title="Folder Path" placeholder="/Optional/Folder/" />
+    </Form>
+  );
+}
+
 async function handleTabMutation(props: {
   actionId: TabActionId;
   action: () => void;
@@ -258,6 +462,18 @@ async function handleTabMutation(props: {
       style: Toast.Style.Failure,
     });
   }
+}
+
+function getChangedValue(originalValue: string, nextValue: string): string | undefined {
+  const trimmedNextValue = nextValue.trim();
+  if (!trimmedNextValue || trimmedNextValue === originalValue.trim()) return undefined;
+  return trimmedNextValue;
+}
+
+function validateBookmarkRequiredFields(values: BookmarkFormValues): string | undefined {
+  if (!values.title.trim()) return "Title is required.";
+  if (!values.url.trim()) return "URL is required.";
+  return undefined;
 }
 
 function getTabActionSuccessTitle(actionId: TabActionId): string {
