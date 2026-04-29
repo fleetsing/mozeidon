@@ -4,13 +4,14 @@
 
 Define a typed Mozeidon context API contract for the current active Zen tab and page context. The contract should replicate the useful parts of Raycast's `{browser-tab}` placeholder for Zen Browser, while remaining a native Mozeidon surface that does not spoof Raycast private browser-extension internals.
 
-This spec defines CLI shapes, JSON response semantics, output formats, error behavior, size limits, selector behavior, selection fallback behavior, permission expectations, and compatibility requirements for future Raycast commands, AI Extension tools, and an optional MCP wrapper.
+This spec defines CLI shapes, JSON response semantics, output formats, error behavior, size limits, selector behavior, selection fallback behavior, permission expectations, and compatibility requirements for Raycast commands, Raycast AI Extension tools, and an optional MCP wrapper.
 
 ## Status
 
 - Implemented
-- Minimal first implementation covers active tab/page identity and structured capability reporting.
-- DOM extraction, selectors, selection, metadata, links, and sanitized HTML remain permission-gated follow-up work.
+- Current implementation covers active tab/page identity, page text/Markdown, selection, metadata, links, structured warnings/errors, and capability reporting.
+- Sanitized HTML remains guarded by `html_sanitizer_missing`.
+- Raycast commands and `@zen` AI Extension tools now consume this contract. MCP remains future work.
 
 ## Milestone
 
@@ -23,7 +24,7 @@ Raycast's `{browser-tab}` placeholder is useful because it gives commands and AI
 Mozeidon needs a stable, typed context contract that can be consumed by:
 
 - Raycast commands and copy actions;
-- future Raycast AI Extension tools for `@zen`;
+- Raycast AI Extension tools for `@zen`;
 - a later MCP wrapper;
 - tests, fixtures, and downstream scripts.
 
@@ -41,7 +42,7 @@ The contract must be explicit enough to implement safely, without mixing current
 - Define permission and capability reporting.
 - Keep current-tab extraction separate from multi-tab context and site adapters.
 - Avoid Raycast `{browser-tab}` spoofing.
-- Make the contract suitable for future Raycast commands, AI Extension tools, and MCP tools.
+- Make the contract suitable for Raycast commands, Raycast AI Extension tools, and future MCP tools.
 
 ## Non-Goals
 
@@ -69,12 +70,16 @@ Implemented areas:
 - Active tab/page identity derived from existing tab/window capabilities.
 - Structured JSON capability and permission reporting for unavailable DOM extraction.
 
-Future implementation areas, not changed by this spec:
+Implemented by follow-up specs:
 
 - Firefox-family add-on for active page, selection, DOM, and metadata extraction.
 - Raycast extension for copy/context commands.
-- Future AI Extension and MCP wrapper surfaces.
+- AI Extension tool surfaces.
 - Test fixtures for context output.
+
+Future implementation areas, not changed by this spec:
+
+- MCP wrapper surfaces.
 
 Out of scope for this spec:
 
@@ -88,14 +93,14 @@ Out of scope for this spec:
 
 ### Copy Active Page Context
 
-1. User invokes a future Raycast command or action for the active Zen page.
+1. User invokes a Raycast command or action for the active Zen page.
 2. Raycast calls Mozeidon through the safe CLI wrapper.
 3. Mozeidon returns active page context in the requested format.
 4. Raycast copies or inserts the context.
 
 ### Use Page Context In AI
 
-1. User invokes a future `@zen` AI Extension tool.
+1. User invokes an `@zen` AI Extension tool.
 2. The tool calls the same Mozeidon context API.
 3. The tool receives structured JSON with the requested content representation populated.
 4. The AI workflow can cite the source URL/title and understand warnings, truncation, and permissions.
@@ -111,13 +116,13 @@ Out of scope for this spec:
 ### Use Current Selection
 
 1. User selects text in Zen.
-2. User invokes a future selection command.
+2. User invokes a selection-aware command or tool.
 3. Mozeidon returns the selected text and page identity.
 4. If no selection is available, behavior follows the selection fallback rules in this spec.
 
 ## Proposed Design
 
-Add a future `context` CLI command group as the stable contract surface.
+The `context` CLI command group is the stable contract surface.
 
 Required command shapes to design for:
 

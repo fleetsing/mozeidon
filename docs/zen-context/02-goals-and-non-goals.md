@@ -8,16 +8,16 @@
 - Prefer Raycast extension changes when existing Mozeidon CLI features are enough.
 - Use Mozeidon CLI/add-on changes only when a required capability is unavailable at the Raycast layer.
 - Keep native messenger changes out of scope unless the current protocol is proven insufficient.
-- Provide stable context contracts that future Raycast, AI Extension, and MCP layers can share.
+- Provide stable context contracts that Raycast commands, Raycast AI Extension tools, and future MCP layers can share.
 - Make destructive operations explicit and confirmation-gated.
-- Keep content extraction optional and least-privilege.
+- Keep content extraction explicit, user-visible, and least-privilege within the constraints documented by the relevant specs.
 
 ## Non-Goals
 
 - Do not spoof Raycast's private browser-extension internals.
 - Do not depend on private Raycast placeholder implementation details.
 - Do not silently change existing CLI JSON output shapes.
-- Do not add broad browser permissions without a spec.
+- Do not add broad browser permissions without a spec and security note.
 - Do not add production dependencies without documented justification.
 - Do not build cloud sync or remote browsing memory in the early milestones.
 - Do not make the native app a feature surface unless transport becomes the blocker.
@@ -28,7 +28,7 @@
 - Zen Browser is Firefox-derived, so the Firefox-family add-on is the primary browser extension path.
 - Multiple browser profiles can be active; the default CLI profile may not be Zen.
 - Raycast commands may receive user-derived or page-derived input; command execution must avoid shell injection.
-- Browser content extraction can expose sensitive data; it must be opt-in, scoped, and visible.
+- Browser content extraction can expose sensitive data; it must be scoped, documented, and visible to the user.
 - CLI JSON output is a public integration surface for scripts and other tools.
 
 ## Decision Priority

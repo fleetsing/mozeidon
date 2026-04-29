@@ -8,18 +8,24 @@ Mozeidon is a browser add-on, native app, CLI, and optional desktop UI architect
 
 Location: `raycast/`
 
-The Raycast extension is a local UI over Mozeidon CLI commands. It currently:
+The Raycast extension is a local UI and AI tool surface over Mozeidon CLI commands. It currently:
 
 - lists open tabs with `mozeidon tabs get`;
 - lists recently closed tabs with `mozeidon tabs get --closed`;
 - streams bookmarks with `mozeidon bookmarks -c 1000`;
+- searches and opens history;
 - switches to a tab with `mozeidon tabs switch <windowId>:<tabId>`;
 - closes an open tab with `mozeidon tabs close <windowId>:<tabId>`;
 - opens a URL or search query with `mozeidon tabs new`;
+- copies active page Markdown with source attribution;
+- summarizes the active page with Raycast AI;
+- asks Raycast AI a page-grounded question;
+- smart-summarizes Zen selection, Raycast selected text, or active page content;
+- exposes `@zen` Raycast AI Extension tools for context, selection/page fallback, tab listing/search, tab content, and non-destructive URL open/focus;
 - activates Zen Browser with AppleScript bundle ID `app.zen-browser.zen`;
 - opens Zen with the user-configured browser command, defaulting to `open -b app.zen-browser.zen`.
 
-The current extension uses shell-string command execution in several places. Future work should replace that pattern with argument-array helpers around `execFile` or `spawn`.
+Mozeidon CLI calls from the Raycast extension are centralized through argument-array helpers around `execFile` or `spawn`.
 
 ### Mozeidon CLI
 
@@ -43,8 +49,13 @@ Important existing commands for Zen Context:
 - `mozeidon tabs get --with-windows`
 - `mozeidon tabs get --with-groups`
 - `mozeidon tabs switch <windowId>:<tabId>`
+- `mozeidon context active --format markdown`
+- `mozeidon context selection`
+- `mozeidon context metadata`
+- `mozeidon context links`
 - `mozeidon bookmarks`
 - `mozeidon history`
+- `mozeidon windows get`
 
 The `--with-windows` tab flag exists in code and returns window focus metadata. Keep docs in sync with this behavior.
 
@@ -54,7 +65,7 @@ Location: `firefox-addon/`
 
 Zen uses the Firefox-family add-on. The add-on receives commands from the native app and uses WebExtension APIs for tabs, sessions, bookmarks, history, tab groups, windows, and storage.
 
-The add-on is the right layer only when data cannot be derived from existing CLI output. Examples that may require add-on work later include selected text, page DOM metadata, or readable page content.
+The add-on is the right layer only when data cannot be derived from existing CLI output. Current Zen Context page extraction uses the Firefox-family add-on for selected text, page DOM metadata, readable page content, and links.
 
 ### Chrome Add-On
 
@@ -78,13 +89,11 @@ Current Raycast flow:
 4. CLI finds the target profile, then sends IPC commands to the native app.
 5. Native app relays to the browser add-on.
 6. Add-on queries browser APIs and returns JSON data.
-7. Raycast renders lists or performs an action.
+7. Raycast renders lists, runs a local command action, or returns structured tool output to Raycast AI.
 
 ## Current Gaps
 
-- Raycast does not expose profile selection even though the CLI supports it.
-- Raycast does not expose current active tab as a first-class context object.
-- Raycast does not consume `--with-windows` or `--with-groups`.
-- Raycast does not expose history, tab groups, pin/move/duplicate, or bookmark write operations.
-- Current command execution is shell-string based.
-- There are no automated tests in the repo.
+- Raycast still does not expose every Mozeidon browser action, such as pin/unpin, move, duplicate, group mutation, or bookmark write flows.
+- MCP is intentionally not implemented yet.
+- Site adapters and local browsing memory are intentionally not implemented yet.
+- Context extraction on normal web pages depends on the documented Firefox/Zen `<all_urls>` host-permission exception.

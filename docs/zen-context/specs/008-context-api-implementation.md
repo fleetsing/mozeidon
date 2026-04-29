@@ -9,9 +9,9 @@ The first implementation should prioritize correctness, clear failure modes, lea
 ## Status
 
 - Implemented
-- V1 adds the CLI/add-on context extraction path without browser permission changes.
+- V1 adds the CLI/add-on context extraction path. Follow-up Specs 010 and 011 document the accepted `<all_urls>` Firefox/Zen host-permission exception required for Raycast-triggered native-message page extraction.
 - HTML remains guarded by `html_sanitizer_missing` until sanitizer behavior is implemented and tested.
-- Real DOM extraction depends on the browser granting active-tab/page script access; when unavailable, commands return structured partial/error JSON.
+- Real DOM extraction depends on browser script access; when unavailable, commands return structured partial/error JSON.
 - Manual 7.2 verification showed that permission-denied fallbacks must clearly distinguish tab metadata from real DOM extraction.
 
 ## Milestone
@@ -42,8 +42,8 @@ The browser add-on currently has tab, session, bookmark, history, group, and sto
   - `mozeidon context links`
 - Return valid structured JSON matching the Spec 007 contract.
 - Preserve existing tab, bookmark, history, group, window, and profile behavior.
-- Use the least-privilege browser permission model feasible for V1.
-- Prefer `activeTab` and user-triggered access where feasible.
+- Use the least-privilege browser permission model feasible for V1 and document any required exceptions.
+- Prefer `activeTab` and user-triggered access where feasible, while acknowledging Raycast-triggered native-message extraction may require host permission.
 - Report permission and unsupported-page failures through structured JSON and warnings.
 - Avoid native messenger changes unless implementation proves the existing command/payload shape cannot safely carry the data.
 - Add focused CLI, core mapping, and add-on extraction tests where feasible.
@@ -57,7 +57,7 @@ The browser add-on currently has tab, session, bookmark, history, group, and sto
 - No site adapter registry.
 - No persistent page-context cache.
 - No embeddings or browsing memory.
-- No broad host permission such as `<all_urls>` by default.
+- No broad host permission such as `<all_urls>` without a documented follow-up spec and security note.
 - No raw/plain stdout output mode.
 - No raw or unsafe HTML mode.
 - No browser-content mutation.
@@ -647,8 +647,8 @@ Decisions:
 - If DOM permission is missing, `context metadata` and `context links` must not return empty arrays/objects as if extraction succeeded. Omit those extracted fields and report `permission_unavailable`.
 - Empty metadata/link arrays mean the page was actually read and none were found.
 - `--format html` remains disabled with `html_sanitizer_missing` until sanitizer support is implemented and tested.
-- A local verification build may temporarily add a narrow host permission such as `https://en.wikipedia.org/*`, but committed defaults must not add broad host permissions.
-- `--require-content` is needed by future Raycast summarization flows; it is documented as an immediate follow-up unless added in this spec.
+- Specs 010 and 011 later documented and accepted the `<all_urls>` Firefox/Zen host-permission exception for Raycast-triggered native-message context extraction. That supersedes the original V1 preference for no broad host permission by default.
+- Raycast summarization consumers now enforce real-content requirements client-side. A CLI-level `--require-content` flag remains optional future hardening if non-Raycast consumers need the same behavior.
 
 ## Open Questions
 
@@ -671,3 +671,4 @@ Decisions:
 - 2026-04-28: Fixed add-on profile registration reuse so temporary add-on reconnects do not rotate `profileId` on every native-app reconnect.
 - 2026-04-28: Updated V1 semantics from manual 7.2 verification: tab metadata fallback is explicitly marked as non-DOM, permission-denied selection/metadata/links are unavailable instead of empty successful reads, and permission fields distinguish tab metadata from DOM access.
 - 2026-04-28: Addressed PR review gaps in the add-on extraction path: malformed context requests now return stable structured errors, selectors are rejected outside `context active`, metadata item/JSON-LD caps report truncation, and string truncation no longer uses quadratic byte checks.
+- 2026-04-28: Follow-up Raycast manual verification proved `activeTab` alone does not cover Raycast-triggered native-message extraction, because the request starts outside the browser extension user-gesture path. Specs 010 and 011 therefore document the `<all_urls>` Firefox/Zen host-permission exception now present in the add-on manifest.
