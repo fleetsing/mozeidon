@@ -772,9 +772,11 @@ mozeidon context links
 - `native_messaging_unavailable`
 - `invalid_format`
 - `unsupported_page`
+- `html_sanitizer_missing`
+
+**Common context warning codes:**
 - `permission_unavailable`
 - `content_unavailable`
-- `html_sanitizer_missing`
 
 ---
 

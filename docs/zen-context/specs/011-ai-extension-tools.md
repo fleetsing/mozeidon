@@ -7,7 +7,7 @@ Expose Zen Context and safe browser-control capabilities through Raycast AI Exte
 ## Status
 
 - Implemented
-- 2026-04-28: Implemented initial Raycast AI Extension tool manifest metadata, six `src/tools/*` entry points, shared tool handlers, representative eval metadata, and focused unit coverage. Implementation uses existing Mozeidon argument-array helpers and existing context/tab APIs without native messenger or browser permission changes.
+- 2026-04-28: Implemented initial Raycast AI Extension tool manifest metadata, six `src/tools/*` entry points, shared tool handlers, representative eval metadata, and focused unit coverage. Implementation uses existing Mozeidon argument-array helpers and existing context/tab APIs without native messenger changes or any additional browser permission changes beyond the documented `<all_urls>` host-permission exception for Raycast-triggered context extraction.
 
 ## Milestone
 
