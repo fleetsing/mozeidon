@@ -4,7 +4,7 @@ export { TAB_TYPE } from "./tabTypes";
 
 const preferences = getPreferenceValues<Preferences>();
 
-export const COMMAND_NAME = "Mozeidon";
+export const COMMAND_NAME = "Zen Tabs";
 export const MOZEIDON = preferences.mozeidon;
 export const PROFILE_ID = preferences.profileId?.trim() || undefined;
 export const SEARCH_ENGINE = preferences.searchEngine;

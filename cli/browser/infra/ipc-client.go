@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/james-barrow/golang-ipc"
 
@@ -17,6 +18,11 @@ type IpcClient struct {
 type EndMessage struct {
 	End string `json:"data"`
 }
+
+const (
+	ipcConnectTimeout = 5 * time.Second
+	ipcRetryDelay     = 100 * time.Millisecond
+)
 
 func (ipc *IpcClient) Send(
 	cmd models.Command,
@@ -51,38 +57,45 @@ func (ipc *IpcClient) Send(
 	return channel
 }
 
-func NewIpcClient(host string) *IpcClient {
+func NewIpcClient(host string) (*IpcClient, error) {
 	config := ipc.ClientConfig{
 		Encryption: true,
 		Timeout:    2,
 		RetryTimer: 0,
 	}
 
-	ipc, err := ipc.StartClient(host, &config)
+	deadline := time.Now().Add(ipcConnectTimeout)
+
+	for {
+		client, err := connectIpcClient(host, &config)
+		if err != nil {
+			if time.Now().Before(deadline) {
+				time.Sleep(ipcRetryDelay)
+				continue
+			}
+
+			return nil, fmt.Errorf("[Error] Cannot read via ipc with host: %s", host)
+		}
+
+		return &IpcClient{client}, nil
+	}
+}
+
+func connectIpcClient(host string, config *ipc.ClientConfig) (*ipc.Client, error) {
+	ipc, err := ipc.StartClient(host, config)
 	if err != nil {
-		println(
-			fmt.Sprintf(
-				`{"error": "[Error] Cannot connect via ipc with host: %s"}`,
-				host,
-			),
-		)
-		os.Exit(1)
+		return nil, err
 	}
 
 	for {
 		message, err := ipc.Read()
 		if err != nil {
-			println(
-				fmt.Sprintf(
-					`{"error": "[Error] Cannot read via ipc with host: %s"}`,
-					host,
-				),
-			)
-			os.Exit(1)
+			ipc.Close()
+			return nil, err
 		}
+
 		if message.MsgType == -1 && message.Status == "Connected" {
-			break
+			return ipc, nil
 		}
 	}
-	return &IpcClient{ipc}
 }

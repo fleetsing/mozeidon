@@ -3,6 +3,7 @@ package context
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -107,10 +108,15 @@ func runContext(mode core.ContextMode, commandFlags contextCommandFlags) {
 
 	app, err := core.NewAppWithProfile(flags.ProfileID)
 	if err != nil {
+		code := "profile_not_found"
+		if isNativeMessagingError(err) {
+			code = "native_messaging_unavailable"
+		}
+
 		writeJSON(core.NewContextError(
 			core.ContextOptions{Mode: mode, Format: format},
 			time.Now().UTC(),
-			"profile_not_found",
+			code,
 			err.Error(),
 			map[string]interface{}{"profileId": flags.ProfileID},
 		))
@@ -142,4 +148,9 @@ func runContext(mode core.ContextMode, commandFlags contextCommandFlags) {
 func writeJSON(payload interface{}) {
 	encoder := json.NewEncoder(os.Stdout)
 	_ = encoder.Encode(payload)
+}
+
+func isNativeMessagingError(err error) bool {
+	message := err.Error()
+	return strings.Contains(message, "Cannot read via ipc") || strings.Contains(message, "Cannot connect via ipc")
 }

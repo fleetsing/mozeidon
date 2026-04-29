@@ -1,6 +1,7 @@
 package context
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -42,6 +43,21 @@ func TestContextCommandsExposeRequiredFlags(t *testing.T) {
 		if cmd.Flags().Lookup("selector") != nil {
 			t.Fatalf("did not expect %s command to expose --selector", command.name)
 		}
+	}
+}
+
+func TestIsNativeMessagingError(t *testing.T) {
+	for _, message := range []string{
+		"[Error] Cannot read via ipc with host: mozeidon_native_app_123",
+		"[Error] Cannot connect via ipc with host: mozeidon_native_app_123",
+	} {
+		if !isNativeMessagingError(errors.New(message)) {
+			t.Fatalf("expected native messaging error for %q", message)
+		}
+	}
+
+	if isNativeMessagingError(errors.New("No profileId or profileAlias matching Zen")) {
+		t.Fatal("did not expect profile lookup error to be classified as native messaging")
 	}
 }
 

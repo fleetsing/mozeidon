@@ -177,16 +177,24 @@ func GetProfileById(profileId string) (*Profile, error) {
 	}
 
 	// Find by profileId
+	matchingProfiles := []Profile{}
 	for i := range allProfiles {
 		if allProfiles[i].ProfileId == profileId {
-			return &allProfiles[i], nil
+			matchingProfiles = append(matchingProfiles, allProfiles[i])
 		}
 	}
+	if len(matchingProfiles) > 0 {
+		return GetPreferredProfile(&matchingProfiles)
+	}
 	// Find by profileAlias
+	matchingProfiles = []Profile{}
 	for i := range allProfiles {
 		if allProfiles[i].ProfileAlias == profileId {
-			return &allProfiles[i], nil
+			matchingProfiles = append(matchingProfiles, allProfiles[i])
 		}
+	}
+	if len(matchingProfiles) > 0 {
+		return GetPreferredProfile(&matchingProfiles)
 	}
 
 	return nil, fmt.Errorf(

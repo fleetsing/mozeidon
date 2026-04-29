@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "mozeidon",
-  "title": "Mozeidon",
-  "description": "Search, open tabs and bookmarks in Zen Browser via Mozeidon",
+  "name": "zen",
+  "title": "Zen Context",
+  "description": "Raycast commands and AI tools for Zen Browser, powered by Mozeidon",
   "icon": "zen-logo.png",
   "author": "egovelox",
   "contributors": [],
@@ -73,8 +73,8 @@
   "commands": [
     {
       "name": "mozeidon",
-      "title": "Mozeidon",
-      "subtitle": "Zen Browser add-on",
+      "title": "Zen Tabs",
+      "subtitle": "Zen Browser",
       "description": "Search and switch to Zen tabs, recently closed tabs, bookmarks, etc",
       "mode": "view"
     },
@@ -84,16 +84,203 @@
       "subtitle": "Zen Browser add-on",
       "description": "Search and open Zen Browser history via Mozeidon",
       "mode": "view"
+    },
+    {
+      "name": "copy-current-page-as-markdown",
+      "title": "Zen Context: Copy Current Page as Markdown",
+      "subtitle": "Zen Browser context",
+      "description": "Copy the active Zen page as source-attributed Markdown",
+      "mode": "no-view"
+    },
+    {
+      "name": "summarize-current-page",
+      "title": "Zen Context: Summarize Current Page",
+      "subtitle": "Zen Browser context",
+      "description": "Summarize the active Zen page with Raycast AI",
+      "mode": "view"
+    },
+    {
+      "name": "ask-current-page",
+      "title": "Zen Context: Ask Current Page",
+      "subtitle": "Zen Browser context",
+      "description": "Ask Raycast AI a question about the active Zen page",
+      "mode": "view"
+    },
+    {
+      "name": "smart-summarize",
+      "title": "Zen Context: Smart Summarize",
+      "subtitle": "Zen Browser context",
+      "description": "Summarize Zen selected text, Raycast selected text, or the active page",
+      "mode": "view"
     }
   ],
+  "tools": [
+    {
+      "name": "zen_get_active_context",
+      "title": "Get Active Zen Context",
+      "description": "Get the active Zen tab page context using Mozeidon. Use it to summarize or inspect the current page."
+    },
+    {
+      "name": "zen_get_selection_or_page",
+      "title": "Get Zen Selection or Page",
+      "description": "Get Zen DOM selection, Raycast selected text, or active Zen page content in that order."
+    },
+    {
+      "name": "zen_list_tabs",
+      "title": "List Zen Tabs",
+      "description": "List currently open Zen tabs with stable tab and window metadata."
+    },
+    {
+      "name": "zen_search_tabs",
+      "title": "Search Zen Tabs",
+      "description": "Search currently open Zen tabs by title and URL."
+    },
+    {
+      "name": "zen_get_tab_content",
+      "title": "Get Zen Tab Content",
+      "description": "Get content for the active or unambiguously identified Zen tab using the context API."
+    },
+    {
+      "name": "zen_open_or_focus_url",
+      "title": "Open or Focus URL in Zen",
+      "description": "Open an http(s) URL in Zen or focus an already-open matching tab. Non-destructive."
+    }
+  ],
+  "ai": {
+    "instructions": "Use Zen tools to inspect and control Zen Browser through local Mozeidon commands. Prefer active page context for summarization, selection-or-page context for selected text, and tab search/list tools for open tab questions. Do not claim content is available when a tool returns a content_unavailable error.",
+    "evals": [
+      {
+        "input": "@zen summarize the active tab",
+        "mocks": {
+          "zen_get_active_context": {
+            "ok": true,
+            "tool": "zen_get_active_context",
+            "data": {
+              "source": {
+                "title": "Example",
+                "url": "https://example.com"
+              },
+              "format": "markdown",
+              "markdown": "Example page content"
+            },
+            "warnings": []
+          }
+        },
+        "expected": [
+          {
+            "callsTool": "zen_get_active_context"
+          }
+        ]
+      },
+      {
+        "input": "@zen explain the selected text",
+        "mocks": {
+          "zen_get_selection_or_page": {
+            "ok": true,
+            "tool": "zen_get_selection_or_page",
+            "data": {
+              "source": {
+                "title": "Example",
+                "url": "https://example.com"
+              },
+              "kind": "zen-selection",
+              "format": "markdown",
+              "text": "Selected text",
+              "markdown": "Selected text"
+            },
+            "warnings": []
+          }
+        },
+        "expected": [
+          {
+            "callsTool": "zen_get_selection_or_page"
+          }
+        ]
+      },
+      {
+        "input": "@zen find my GitHub PR tab",
+        "mocks": {
+          "zen_search_tabs": {
+            "ok": true,
+            "tool": "zen_search_tabs",
+            "data": {
+              "query": "GitHub PR",
+              "matches": [
+                {
+                  "id": 1,
+                  "windowId": 2,
+                  "title": "GitHub PR",
+                  "url": "https://github.com/example/pull/1",
+                  "active": false
+                }
+              ]
+            },
+            "warnings": []
+          }
+        },
+        "expected": [
+          {
+            "callsTool": "zen_search_tabs"
+          }
+        ]
+      },
+      {
+        "input": "@zen list open tabs",
+        "mocks": {
+          "zen_list_tabs": {
+            "ok": true,
+            "tool": "zen_list_tabs",
+            "data": {
+              "tabs": [
+                {
+                  "id": 1,
+                  "windowId": 2,
+                  "title": "Example",
+                  "url": "https://example.com",
+                  "active": true
+                }
+              ]
+            },
+            "warnings": []
+          }
+        },
+        "expected": [
+          {
+            "callsTool": "zen_list_tabs"
+          }
+        ]
+      },
+      {
+        "input": "@zen open https://example.com",
+        "mocks": {
+          "zen_open_or_focus_url": {
+            "ok": true,
+            "tool": "zen_open_or_focus_url",
+            "data": {
+              "action": "opened-new",
+              "source": {
+                "url": "https://example.com/"
+              }
+            },
+            "warnings": []
+          }
+        },
+        "expected": [
+          {
+            "callsTool": "zen_open_or_focus_url"
+          }
+        ]
+      }
+    ]
+  },
   "dependencies": {
-    "@raycast/api": "^1.70.3",
+    "@raycast/api": "^1.104.13",
     "@raycast/utils": "^1.13.5"
   },
   "devDependencies": {
     "@raycast/eslint-config": "1.0.8",
-    "@types/node": "20.8.10",
-    "@types/react": "18.2.73",
+    "@types/node": "^22.19.17",
+    "@types/react": "^19.0.10",
     "eslint": "^8.51.0",
     "prettier": "^3.0.3",
     "typescript": "^5.2.2"

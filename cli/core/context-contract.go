@@ -25,6 +25,7 @@ const (
 	DefaultMaxLinks    = 500
 	DefaultMaxImages   = 200
 	DefaultJSONLDBytes = 100000
+	ContextIPCTimeout  = 5 * time.Second
 )
 
 type ContextMode string
@@ -371,30 +372,41 @@ func (a *App) ContextExtractionPayload(options ContextOptions) (ContextExtractio
 		return ContextExtractionPayload{}, false
 	}
 
-	for result := range a.browser.Send(models.Command{
+	return readContextExtractionPayload(a.browser.Send(models.Command{
 		Command: "get-context",
 		Args:    string(request),
-	}) {
-		var envelope struct {
-			Data json.RawMessage `json:"data"`
-		}
-		if err := json.Unmarshal(result.Data, &envelope); err != nil || len(envelope.Data) == 0 {
-			continue
-		}
+	}), time.After(ContextIPCTimeout))
+}
 
-		var errorString string
-		if err := json.Unmarshal(envelope.Data, &errorString); err == nil {
-			continue
-		}
+func readContextExtractionPayload(results <-chan models.CommandResult, timeout <-chan time.Time) (ContextExtractionPayload, bool) {
+	for {
+		select {
+		case result, ok := <-results:
+			if !ok {
+				return ContextExtractionPayload{}, false
+			}
 
-		var payload ContextExtractionPayload
-		if err := json.Unmarshal(envelope.Data, &payload); err != nil {
-			continue
+			var envelope struct {
+				Data json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(result.Data, &envelope); err != nil || len(envelope.Data) == 0 {
+				continue
+			}
+
+			var errorString string
+			if err := json.Unmarshal(envelope.Data, &errorString); err == nil {
+				continue
+			}
+
+			var payload ContextExtractionPayload
+			if err := json.Unmarshal(envelope.Data, &payload); err != nil {
+				continue
+			}
+			return payload, true
+		case <-timeout:
+			return ContextExtractionPayload{}, false
 		}
-		return payload, true
 	}
-
-	return ContextExtractionPayload{}, false
 }
 
 func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.Profile, options ContextOptions, capturedAt time.Time) ZenContext {
