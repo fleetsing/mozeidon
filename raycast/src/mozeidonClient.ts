@@ -14,6 +14,8 @@ export class MozeidonClientError extends Error {
     message: string,
     public readonly context: string,
     public readonly cause?: unknown,
+    public readonly stderr?: string,
+    public readonly stdout?: string,
   ) {
     super(message);
     this.name = "MozeidonClientError";
@@ -139,5 +141,18 @@ function hasNodeErrorCode(error: unknown, code: string): boolean {
 
 function createMozeidonCommandError(error: unknown, context: string, action: "run" | "spawn"): MozeidonClientError {
   const errorCode = hasNodeErrorCode(error, "ENOENT") ? "not_found" : "command_failed";
-  return new MozeidonClientError(errorCode, `Failed to ${action} mozeidon command: ${context}`, context, error);
+  const stderr = getProcessOutput(error, "stderr");
+  const stdout = getProcessOutput(error, "stdout");
+  const message = [`Failed to ${action} mozeidon command: ${context}`, stderr ?? stdout].filter(Boolean).join("\n");
+
+  return new MozeidonClientError(errorCode, message, context, error, stderr, stdout);
+}
+
+function getProcessOutput(error: unknown, key: "stderr" | "stdout"): string | undefined {
+  if (typeof error !== "object" || error === null || !(key in error)) return undefined;
+
+  const output = (error as Record<string, unknown>)[key];
+  if (Buffer.isBuffer(output)) return output.toString().trim() || undefined;
+  if (typeof output === "string") return output.trim() || undefined;
+  return undefined;
 }

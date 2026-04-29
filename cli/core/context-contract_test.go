@@ -348,6 +348,46 @@ func TestNewContextFromExtractionPayloadMapsContentAndMetadata(t *testing.T) {
 	}
 }
 
+func TestReadContextExtractionPayloadTimesOutWhenNoResponseArrives(t *testing.T) {
+	results := make(chan models.CommandResult)
+	timeout := make(chan time.Time)
+	close(timeout)
+
+	if _, ok := readContextExtractionPayload(results, timeout); ok {
+		t.Fatal("expected missing context extraction response to fall back")
+	}
+}
+
+func TestReadContextExtractionPayloadParsesPayloadEnvelope(t *testing.T) {
+	results := make(chan models.CommandResult, 1)
+	timeout := make(chan time.Time)
+	payload := ContextExtractionPayload{
+		OK:     true,
+		Status: ContextStatusOK,
+		Page: ZenPageInfo{
+			URL:   "https://example.com",
+			Title: "Example",
+		},
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("expected payload to marshal: %v", err)
+	}
+	envelopeBytes, err := json.Marshal(map[string]json.RawMessage{"data": payloadBytes})
+	if err != nil {
+		t.Fatalf("expected envelope to marshal: %v", err)
+	}
+	results <- models.CommandResult{Data: envelopeBytes}
+
+	actual, ok := readContextExtractionPayload(results, timeout)
+	if !ok {
+		t.Fatal("expected context extraction payload")
+	}
+	if !actual.OK || actual.Page.URL != "https://example.com" {
+		t.Fatalf("unexpected context extraction payload: %#v", actual)
+	}
+}
+
 func TestContextMetadataFallbackOmitsEmptyMetadataWhenPermissionUnavailable(t *testing.T) {
 	for _, mode := range []ContextMode{ContextModeMetadata, ContextModeLinks} {
 		context := NewContextFromTab(

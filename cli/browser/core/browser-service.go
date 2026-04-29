@@ -9,6 +9,11 @@ type BrowserService struct {
 	ports.CommandSender
 }
 
-func NewBrowserService(ipcName string) *BrowserService {
-	return &BrowserService{infra.NewIpcClient(ipcName)}
+func NewBrowserService(ipcName string) (*BrowserService, error) {
+	client, err := infra.NewIpcClient(ipcName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BrowserService{client}, nil
 }

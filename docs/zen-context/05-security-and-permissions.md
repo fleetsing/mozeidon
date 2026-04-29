@@ -57,6 +57,8 @@ Content extraction permissions must be:
 
 Avoid broad host permissions unless a spec proves they are necessary.
 
+For Zen Context V1, Specs 010 and 011 document one exception: the Firefox/Zen add-on uses `<all_urls>` so Raycast-triggered native-message context extraction can read normal web pages. `activeTab` alone is not enough for this flow because the extraction request originates from Raycast through the CLI/native-message path, not from a browser extension user gesture. Treat this as sensitive browsing-content access and keep all context transmission user-visible.
+
 ## CLI JSON Compatibility
 
 The CLI is an integration surface. Do not silently change existing JSON output shapes.

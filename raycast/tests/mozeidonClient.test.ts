@@ -493,6 +493,29 @@ test("spawnMozeidon uses argument arrays and does not set shell true", () => {
   ]);
 });
 
+test("runMozeidon includes stderr in command failures", () => {
+  assert.throws(
+    () =>
+      runMozeidon(["context", "active", "--format", "markdown"], {
+        executable: "mozeidon",
+        execFile: () => {
+          throw Object.assign(new Error("exit status 1"), {
+            stderr: Buffer.from('Error: unknown command "context" for "mozeidon"\n'),
+          });
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof MozeidonClientError);
+      assert.equal(error.code, "command_failed");
+      assert.equal(error.context, "context active --format markdown");
+      assert.equal(error.stderr, 'Error: unknown command "context" for "mozeidon"');
+      assert.equal(error.stdout, undefined);
+      assert.match(error.message, /unknown command "context"/);
+      return true;
+    },
+  );
+});
+
 test("streamMozeidonLines converts async spawn errors to classified errors", async () => {
   const process = createFakeProcess();
   const lines = streamMozeidonLines(["bookmarks", "-c", "1000"], {
