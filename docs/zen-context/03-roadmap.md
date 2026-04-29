@@ -4,6 +4,8 @@ This roadmap is directional. Each milestone should get a focused spec before imp
 
 ## Milestone 0: Documentation Foundation
 
+Status: implemented and maintained.
+
 Purpose: make future agent sessions productive.
 
 Deliverables:
@@ -18,6 +20,8 @@ Deliverables:
 - Spec and milestone templates.
 
 ## Milestone 1: Raycast Hardening
+
+Status: implemented.
 
 Purpose: make the current Raycast extension safer and more predictable for Zen.
 
@@ -36,6 +40,8 @@ Validation:
 
 ## Milestone 2: Zen Context V1
 
+Status: implemented for CLI context extraction and Raycast command consumers.
+
 Purpose: expose current active Zen tab context from the Raycast layer.
 
 Candidate work:
@@ -52,6 +58,8 @@ Validation:
 - Manual smoke test across one window, multiple windows, and multiple profiles.
 
 ## Milestone 3: Raycast Feature Expansion Over Existing CLI
+
+Status: partially implemented.
 
 Purpose: expose useful Mozeidon features without changing CLI/add-on.
 
@@ -71,13 +79,15 @@ Validation:
 
 ## Milestone 4: AI Extension Tools For `@zen`
 
+Status: implemented for the first read-only/non-destructive tool set.
+
 Purpose: make Zen context available to AI extension workflows.
 
 Candidate work:
 
 - Read-only context tools first.
 - Tool outputs use the stable context API.
-- No page content extraction unless explicitly enabled by a later spec.
+- Use the implemented context API for page content and selected text.
 
 Validation:
 
@@ -85,6 +95,8 @@ Validation:
 - Local-only behavior verification.
 
 ## Milestone 5: Optional MCP Wrapper
+
+Status: not started.
 
 Purpose: expose stable Zen context to MCP clients after the context API settles.
 
@@ -100,6 +112,8 @@ Validation:
 - Contract fixtures.
 
 ## Milestone 6: Site Adapters And Local Browsing Memory
+
+Status: not started.
 
 Purpose: add richer, site-aware context and optional local recall.
 

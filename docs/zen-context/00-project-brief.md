@@ -2,7 +2,7 @@
 
 Zen Context is the project direction for this Mozeidon fork. The near-term goal is to make the bundled Raycast extension work deeply with Zen Browser while staying local, inspectable, and independent from Raycast private browser-extension internals.
 
-The motivating workflow is Raycast's `{browser-tab}` placeholder: users want fast access to the current browser tab as structured context for commands, AI prompts, automations, and future tool calls. This project should replicate and surpass the practical benefits of that workflow for Zen without spoofing Raycast's browser integration.
+The motivating workflow is Raycast's `{browser-tab}` placeholder: users want fast access to the current browser tab as structured context for commands, AI prompts, automations, and tool calls. This project replicates and extends the practical benefits of that workflow for Zen without spoofing Raycast's browser integration.
 
 ## Product Direction
 
@@ -20,7 +20,7 @@ Work in this order:
 1. Expand the Raycast extension using existing Mozeidon CLI features.
 2. Change the Mozeidon CLI or add-on only when the Raycast layer cannot get the required capability.
 3. Add AI Extension tools for `@zen` workflows.
-4. Add an optional MCP wrapper after the context API is stable.
+4. Add an optional MCP wrapper after the Raycast command and AI Extension tool surfaces are stable.
 5. Add site adapters and local browsing memory later.
 
 The native messenger should not change unless the current transport or protocol is proven insufficient.
@@ -44,4 +44,4 @@ This repository currently contains:
 - Raycast extension in `raycast/`.
 - Zen compatibility documentation in `README.md`.
 
-The initial Zen patch is Raycast-focused: it activates and checks Zen Browser by bundle ID instead of assuming Firefox.
+The current Zen Context surface includes a Zen-first Raycast extension, context-aware Raycast commands, `@zen` Raycast AI Extension tools, a CLI context API, and Firefox-family add-on page extraction for Zen.

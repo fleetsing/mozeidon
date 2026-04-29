@@ -6,7 +6,7 @@ Add native Raycast commands that consume the Mozeidon Zen Context API for curren
 
 ## Status
 
-- Implemented pending manual verification
+- Implemented
 - 2026-04-28: Implemented the Raycast helper layer, four native command entries, user-facing command views, source-attributed Markdown copying, Raycast AI result views, Ask Current Page form flow, and Smart Summarize context resolution with focused tests.
 
 ## Milestone

@@ -12,6 +12,8 @@ Mozeidon is a CLI tool to control browsers from the Firefox or Chromium families
   - [Bookmark Operations](#bookmark-operations)
   - [History](#history)
   - [Groups](#groups)
+  - [Windows](#windows)
+  - [Context](#context)
   - [Profiles](#profiles)
 
 ---
@@ -65,6 +67,8 @@ mozeidon
 - Retrieve bookmarks, search and open them
 - Retrieve history
 - Retrieve and manage tab groups
+- Retrieve browser windows and last-focused window state
+- Retrieve Zen context for the active page, selection, metadata, and links
 - Retrieve and manage profiles ( i.e different mozeidon extensions running at the same time )
 
 ---
@@ -162,10 +166,12 @@ mozeidon tabs get [flags]
 - `-c, --closed` - Get only recently-closed tabs
 - `-l, --latest-first` - Order 10 latest accessed tabs first (default: `true`)
 - `-g, --with-groups` - Add tab groups information
+- `-w, --with-windows` - Add browser window information, including last-focused window metadata
 
 **Mutually Exclusive:**
 - `--closed` and `--latest-first`
 - `--go-template` and `--with-groups`
+- `--go-template` and `--with-windows`
 
 **Examples:**
 ```bash
@@ -177,6 +183,9 @@ mozeidon tabs get --closed
 
 # Get tabs with groups
 mozeidon tabs get --with-groups
+
+# Get tabs with window focus metadata
+mozeidon tabs get --with-windows
 
 # Get tabs without ordering latest first
 mozeidon tabs get --latest-first=false
@@ -622,6 +631,155 @@ mozeidon groups update --group-id 1757435983351019 --title "Dev" --color green
 ```
 ---
 
+## Windows
+
+Inspect browser windows.
+
+### `windows get`
+
+Get all browser windows and mark the last-focused window.
+
+**Usage:**
+```bash
+mozeidon windows get
+```
+
+**Examples:**
+```bash
+# Get windows as JSON
+mozeidon windows get
+
+# Target a specific profile
+mozeidon --profile-id "Zen" windows get
+```
+
+**Example output:**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "isLastFocused": true
+    }
+  ]
+}
+```
+
+---
+
+## Context
+
+Retrieve structured Zen context for the active page, selected text, metadata, or links.
+
+Context commands always return structured JSON. The `--format` flag selects which content representation is populated inside the JSON payload; it does not switch to raw stdout.
+
+### `context active`
+
+Get active Zen tab/page context.
+
+**Usage:**
+```bash
+mozeidon context active [flags]
+```
+
+**Flags:**
+- `--format <json|markdown|text|html>` - Structured content format to populate (default: `json`)
+- `--selector <selector>` - CSS selector to scope active page extraction
+- `--max-bytes <number>` - Maximum target bytes for structured context output
+
+**Examples:**
+```bash
+# Get structured JSON context
+mozeidon context active
+
+# Populate Markdown content
+mozeidon context active --format markdown
+
+# Populate text content
+mozeidon context active --format text
+
+# Extract only an article/main region when available
+mozeidon context active --format markdown --selector "main article"
+
+# Target a specific profile
+mozeidon --profile-id "Zen" context active --format markdown
+```
+
+**Notes:**
+- `--format html` currently returns a structured `html_sanitizer_missing` error until sanitizer behavior is implemented and tested.
+- If page extraction is unavailable, the command may return tab metadata with warnings instead of pretending title/URL metadata is real page content.
+
+### `context selection`
+
+Get active Zen tab/page identity plus current selection content.
+
+**Usage:**
+```bash
+mozeidon context selection [flags]
+```
+
+**Flags:**
+- `--format <json|markdown|text|html>` - Structured content format to populate (default: `json`)
+- `--max-bytes <number>` - Maximum target bytes for structured context output
+
+**Examples:**
+```bash
+# Get selected text context
+mozeidon context selection
+
+# Target a specific profile
+mozeidon --profile-id "Zen" context selection
+```
+
+### `context metadata`
+
+Get active Zen tab/page identity plus extracted page metadata.
+
+**Usage:**
+```bash
+mozeidon context metadata [flags]
+```
+
+**Flags:**
+- `--format <json|markdown|text|html>` - Structured content format to populate (default: `json`)
+- `--max-bytes <number>` - Maximum target bytes for structured context output
+
+**Examples:**
+```bash
+mozeidon context metadata
+```
+
+### `context links`
+
+Get active Zen tab/page identity plus extracted links.
+
+**Usage:**
+```bash
+mozeidon context links [flags]
+```
+
+**Flags:**
+- `--format <json|markdown|text|html>` - Structured content format to populate (default: `json`)
+- `--max-bytes <number>` - Maximum target bytes for structured context output
+
+**Examples:**
+```bash
+mozeidon context links
+```
+
+**Common context error codes:**
+- `profile_not_found`
+- `native_messaging_unavailable`
+- `invalid_format`
+- `unsupported_page`
+- `html_sanitizer_missing`
+
+**Common context warning codes:**
+- `permission_unavailable`
+- `content_unavailable`
+
+---
+
 ## Profiles
 
 Manage browser profiles.
@@ -831,4 +989,14 @@ mozeidon history delete --url "https://example.com"
 
 # Or delete everything
 mozeidon history delete --all
+```
+
+**Copy active page context as Markdown:**
+```bash
+mozeidon context active --format markdown
+```
+
+**Inspect selected text context:**
+```bash
+mozeidon context selection
 ```

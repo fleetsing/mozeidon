@@ -5,7 +5,7 @@ The Raycast extension should feel fast, predictable, and native to Raycast. Avoi
 ## Core UX Goals
 
 - Fast access to current Zen context.
-- Clear actions for open tabs, recently closed tabs, bookmarks, and future context formats.
+- Clear actions for open tabs, recently closed tabs, bookmarks, history, page context, summaries, and AI tool workflows.
 - Minimal configuration, with explicit profile targeting when multiple browsers are active.
 - Safe defaults for destructive actions.
 - Useful errors when Zen, Mozeidon CLI, the add-on, or the native app is missing.
@@ -14,15 +14,20 @@ The Raycast extension should feel fast, predictable, and native to Raycast. Avoi
 
 Prefer small focused commands over one overloaded command when workflows differ.
 
-Candidate command categories:
+Implemented command categories:
 
 - Browse tabs.
-- Copy current tab context.
 - Search history.
+- Copy current page Markdown.
+- Summarize or ask about the current page.
+- Smart summarize selected text or active page content.
+
+Candidate future command categories:
+
 - Manage tab groups.
 - Configure Zen profile.
 
-The existing `Mozeidon` command can remain the main browser list. Zen Context commands can be added only when a spec defines the workflow.
+The visible browser-list command is `Zen Tabs`. The historical command id may remain `mozeidon` internally, but user-facing copy should use the Zen Context naming.
 
 ## Context Formatting
 
@@ -32,6 +37,7 @@ Common output formats:
 - Title.
 - Title and URL.
 - Markdown link.
+- Source-attributed Markdown page content.
 - Prompt block.
 - JSON context object.
 
