@@ -65,16 +65,18 @@ func NewIpcClient(host string) (*IpcClient, error) {
 	}
 
 	deadline := time.Now().Add(ipcConnectTimeout)
+	var lastErr error
 
 	for {
 		client, err := connectIpcClient(host, &config)
 		if err != nil {
+			lastErr = err
 			if time.Now().Before(deadline) {
 				time.Sleep(ipcRetryDelay)
 				continue
 			}
 
-			return nil, fmt.Errorf("[Error] Cannot read via ipc with host: %s", host)
+			return nil, lastErr
 		}
 
 		return &IpcClient{client}, nil
@@ -84,18 +86,36 @@ func NewIpcClient(host string) (*IpcClient, error) {
 func connectIpcClient(host string, config *ipc.ClientConfig) (*ipc.Client, error) {
 	ipc, err := ipc.StartClient(host, config)
 	if err != nil {
-		return nil, err
+		return nil, newIpcClientError(host, "connect", err)
 	}
 
 	for {
 		message, err := ipc.Read()
 		if err != nil {
 			ipc.Close()
-			return nil, err
+			return nil, newIpcClientError(host, "read", err)
 		}
 
 		if message.MsgType == -1 && message.Status == "Connected" {
 			return ipc, nil
 		}
 	}
+}
+
+type ipcClientError struct {
+	host      string
+	operation string
+	err       error
+}
+
+func newIpcClientError(host string, operation string, err error) error {
+	return &ipcClientError{host: host, operation: operation, err: err}
+}
+
+func (e *ipcClientError) Error() string {
+	return fmt.Sprintf("[Error] Cannot %s via ipc with host: %s: %v", e.operation, e.host, e.err)
+}
+
+func (e *ipcClientError) Unwrap() error {
+	return e.err
 }

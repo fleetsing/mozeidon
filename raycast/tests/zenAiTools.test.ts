@@ -373,6 +373,26 @@ test("zen_get_tab_content rejects ambiguous URL targets", async () => {
   if (!result.ok) assert.equal(result.error.code, "ambiguous_tab");
 });
 
+test("zen_get_tab_content rejects partial tab targets", async () => {
+  const result = await zenGetTabContent({ tabId: 2 }, createDependencies({ tabs: sampleTabs() }));
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "invalid_input");
+    assert.match(result.error.message, /tabId and windowId/);
+  }
+});
+
+test("zen_get_tab_content rejects empty URL targets", async () => {
+  const result = await zenGetTabContent({ url: "   " }, createDependencies({ tabs: sampleTabs() }));
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "invalid_input");
+    assert.match(result.error.message, /URL must be non-empty/);
+  }
+});
+
 test("zen_open_or_focus_url rejects non-http URL schemes", async () => {
   const result = await zenOpenOrFocusUrl({ url: "file:///etc/passwd" }, createDependencies({}));
 

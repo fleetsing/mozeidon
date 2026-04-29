@@ -313,12 +313,17 @@ export async function zenGetTabContent(
   input: ZenGetTabContentInput,
   dependencies: ZenAiToolDependencies,
 ): Promise<ZenToolResponse<ZenGetTabContentData>> {
-  const format = getSelectionFormat(input.format);
-  const requireContent = input.requireContent ?? true;
+  const safeInput: ZenGetTabContentInput = input ?? {};
+  const format = getSelectionFormat(safeInput.format);
+  const requireContent = safeInput.requireContent ?? true;
+  const targetValidationError = validateTabContentTarget(safeInput);
+  if (targetValidationError) {
+    return fail("zen_get_tab_content", "invalid_input", targetValidationError);
+  }
 
   return withToolErrors("zen_get_tab_content", async () => {
-    if (hasTabTarget(input)) {
-      const tab = await resolveTabTarget(input, dependencies);
+    if (hasTabTarget(safeInput)) {
+      const tab = await resolveTabTarget(safeInput, dependencies);
       if (shouldSwitchBeforeReading(tab)) {
         await dependencies.switchTab(tab.windowId ?? 0, tab.id);
       }
@@ -662,7 +667,21 @@ function normalizeHttpUrl(value: string | undefined): string | undefined {
 }
 
 function hasTabTarget(input: ZenGetTabContentInput): boolean {
-  return (input.tabId !== undefined && input.windowId !== undefined) || input.url !== undefined;
+  return (input.tabId !== undefined && input.windowId !== undefined) || trimToText(input.url) !== undefined;
+}
+
+function validateTabContentTarget(input: ZenGetTabContentInput): string | undefined {
+  const hasTabId = input.tabId !== undefined;
+  const hasWindowId = input.windowId !== undefined;
+  if (hasTabId !== hasWindowId) {
+    return "tabId and windowId must be provided together.";
+  }
+
+  if (input.url !== undefined && !trimToText(input.url)) {
+    return "URL must be non-empty when provided.";
+  }
+
+  return undefined;
 }
 
 function trimToText(value: string | undefined): string | undefined {
