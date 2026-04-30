@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "status": "error",
+  "code": "html_sanitizer_missing",
+  "message": "HTML context output requires sanitizer support before it can be enabled."
+}

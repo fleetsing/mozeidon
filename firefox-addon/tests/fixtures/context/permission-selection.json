@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "status": "partial",
+  "tab": {
+    "id": 7,
+    "groupId": -1,
+    "windowId": 3,
+    "title": "Example Article",
+    "pinned": false,
+    "url": "https://www.example.com/article",
+    "active": true,
+    "domain": "example.com",
+    "lastAccessed": 1235,
+    "index": 2
+  },
+  "window": {
+    "id": 3,
+    "isLastFocused": true
+  },
+  "page": {
+    "url": "https://www.example.com/article",
+    "title": "Example Article",
+    "domain": "example.com"
+  },
+  "extraction": {
+    "mode": "selection",
+    "domRead": false,
+    "warnings": [
+      {
+        "code": "permission_unavailable",
+        "message": "Browser denied page-content extraction.",
+        "field": "content.selection"
+      }
+    ],
+    "limits": {
+      "maxBytes": 1000000,
+      "maxTextBytes": 50000,
+      "maxHtmlBytes": 250000,
+      "maxMarkdownBytes": 50000,
+      "maxLinks": 500,
+      "maxImages": 200,
+      "maxJsonLdBytes": 100000
+    },
+    "truncation": {
+      "truncated": false,
+      "fields": []
+    }
+  },
+  "permissions": {
+    "canReadTabMetadata": true,
+    "hasDomAccess": false,
+    "hasActiveTabGrant": false,
+    "hasHostPermission": false,
+    "canReadActiveTab": false,
+    "canReadSelection": false,
+    "canReadPageContent": false,
+    "canReadMetadata": false,
+    "canReadLinks": false,
+    "requiresHostPermission": true,
+    "missing": [
+      "activeTab_or_host_permission"
+    ]
+  },
+  "capabilities": {
+    "activeTab": "available",
+    "selection": "permission-required",
+    "pageContent": "permission-required",
+    "metadata": "permission-required",
+    "links": "permission-required"
+  }
+}
