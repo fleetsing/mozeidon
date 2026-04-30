@@ -5,6 +5,7 @@ import { createRaycastAiClient, RaycastAiUnavailableError } from "../src/raycast
 import {
   ACTIVE_PAGE_MARKDOWN_ARGS,
   buildSourceAttributedMarkdown,
+  classifyZenContextContent,
   fetchActivePageMarkdown,
   parseRaycastZenContext,
   requireRealMarkdownContext,
@@ -82,6 +83,85 @@ test("parseRaycastZenContext accepts structured CLI content values and extractio
     name: "ZenContextError",
     code: "content_unavailable",
   });
+});
+
+test("classifyZenContextContent accepts degraded text-derived Markdown as usable", () => {
+  const context = parseRaycastZenContext({
+    ok: true,
+    status: "partial",
+    page: {
+      title: "Article",
+      url: "https://example.com/article",
+    },
+    content: {
+      markdown: {
+        value: "# Article\n\nReadable text",
+      },
+    },
+    extraction: {
+      contentSource: "document",
+      domRead: true,
+      warnings: [{ code: "markdown_derived_from_text" }, { code: "markdown_structure_unavailable" }],
+    },
+  });
+
+  assert.equal(classifyZenContextContent(context.raw), "usable-degraded-content");
+  assert.equal(requireRealMarkdownContext(context), "# Article\n\nReadable text");
+});
+
+test("classifyZenContextContent rejects title and URL metadata fallback as page content", () => {
+  const context = parseRaycastZenContext({
+    ok: true,
+    status: "partial",
+    page: {
+      title: "Article",
+      url: "https://example.com/article",
+    },
+    content: {
+      markdown: {
+        value: "# Article\n\nhttps://example.com/article",
+      },
+    },
+    extraction: {
+      contentSource: "tab-metadata",
+      domRead: false,
+      warnings: [{ code: "tab_metadata_fallback" }, { code: "metadata_only" }, { code: "dom_content_unavailable" }],
+    },
+  });
+
+  assert.equal(context.isMetadataOnly, true);
+  assert.equal(classifyZenContextContent(context.raw), "metadata-only");
+  assert.throws(() => requireRealMarkdownContext(context), {
+    name: "ZenContextError",
+    code: "content_unavailable",
+  });
+});
+
+test("classifyZenContextContent distinguishes empty and error payloads", () => {
+  assert.equal(
+    classifyZenContextContent({
+      ok: true,
+      status: "empty",
+      extraction: {
+        contentSource: "selector",
+        domRead: true,
+        warnings: [{ code: "selector_no_match" }],
+      },
+    }),
+    "empty",
+  );
+
+  assert.equal(
+    classifyZenContextContent({
+      ok: false,
+      status: "error",
+      error: {
+        code: "restricted_page",
+        message: "Restricted page.",
+      },
+    }),
+    "error",
+  );
 });
 
 test("parseRaycastZenContext ignores non-string content values", () => {

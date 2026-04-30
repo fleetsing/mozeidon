@@ -1,7 +1,12 @@
 import type { ContextWarning } from "./types"
 
 export function permissionsForWarnings(warnings: ContextWarning[]) {
-  if (warnings.some((warning) => warning.code === "unsupported_page")) {
+  if (
+    warnings.some(
+      (warning) =>
+        warning.code === "unsupported_page" || warning.code === "restricted_page"
+    )
+  ) {
     return {
       canReadTabMetadata: true,
       hasDomAccess: false,
@@ -14,7 +19,16 @@ export function permissionsForWarnings(warnings: ContextWarning[]) {
       canReadLinks: false,
     }
   }
-  if (warnings.some((warning) => warning.code === "permission_unavailable")) {
+  if (
+    warnings.some(
+      (warning) =>
+        warning.code === "permission_unavailable" ||
+        warning.code === "host_permission_missing" ||
+        warning.code === "active_tab_grant_missing" ||
+        warning.code === "injection_unavailable" ||
+        warning.code === "dom_content_unavailable"
+    )
+  ) {
     return {
       canReadTabMetadata: true,
       hasDomAccess: false,
@@ -43,7 +57,12 @@ export function permissionsForWarnings(warnings: ContextWarning[]) {
 }
 
 export function capabilitiesForWarnings(warnings: ContextWarning[]) {
-  if (warnings.some((warning) => warning.code === "unsupported_page")) {
+  if (
+    warnings.some(
+      (warning) =>
+        warning.code === "unsupported_page" || warning.code === "restricted_page"
+    )
+  ) {
     return {
       activeTab: "available",
       selection: "unavailable",
@@ -52,7 +71,16 @@ export function capabilitiesForWarnings(warnings: ContextWarning[]) {
       links: "unavailable",
     }
   }
-  if (warnings.some((warning) => warning.code === "permission_unavailable")) {
+  if (
+    warnings.some(
+      (warning) =>
+        warning.code === "permission_unavailable" ||
+        warning.code === "host_permission_missing" ||
+        warning.code === "active_tab_grant_missing" ||
+        warning.code === "injection_unavailable" ||
+        warning.code === "dom_content_unavailable"
+    )
+  ) {
     return {
       activeTab: "available",
       selection: "permission-required",

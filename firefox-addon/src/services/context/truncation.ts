@@ -7,11 +7,12 @@ export function truncationFromWarnings(
     .filter(
       (warning) =>
         (warning.code === "content_truncated" ||
-          warning.code === "metadata_truncated") &&
+          warning.code === "metadata_truncated" ||
+          warning.code === "field_truncated") &&
         warning.field
     )
     .map((warning) => warning.field!)
-  return { truncated: fields.length > 0, fields }
+  return { truncated: fields.length > 0, fields: Array.from(new Set(fields)) }
 }
 
 export function mergeTruncation(
@@ -51,6 +52,11 @@ export function truncate(
   warnings.push({
     code: "content_truncated",
     message: "Context content was truncated to fit the configured size limit.",
+    field,
+  })
+  warnings.push({
+    code: "field_truncated",
+    message: "The field was truncated to fit the configured size limit.",
     field,
   })
   return { value: output, length: output.length, truncated: true }

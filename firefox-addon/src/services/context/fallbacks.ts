@@ -14,6 +14,17 @@ export function unsupportedFallback(
         "DOM extraction is not available on privileged or unsupported browser pages.",
       field: "page.url",
     },
+    {
+      code: "restricted_page",
+      message:
+        "DOM extraction is not available on privileged or restricted browser pages.",
+      field: "page.url",
+    },
+    {
+      code: "dom_content_unavailable",
+      message: "DOM page content could not be read.",
+      field: "content",
+    },
   ]
   return {
     status: "partial",
@@ -42,6 +53,30 @@ export function permissionFallback(
               ? "metadata"
               : "content",
     },
+    {
+      code: "injection_unavailable",
+      message: "Script injection could not run for the target tab.",
+      field:
+        request.mode === "selection"
+          ? "content.selection"
+          : request.mode === "links"
+            ? "metadata.links"
+            : request.mode === "metadata"
+              ? "metadata"
+              : "content",
+    },
+    {
+      code: "dom_content_unavailable",
+      message: "DOM page content could not be read.",
+      field:
+        request.mode === "selection"
+          ? "content.selection"
+          : request.mode === "links"
+            ? "metadata.links"
+            : request.mode === "metadata"
+              ? "metadata"
+              : "content",
+    },
   ]
   return {
     status: "partial",
@@ -60,6 +95,7 @@ export function fallbackContent(
   warnings: ContextWarning[]
 ) {
   if (request.mode !== "active") return undefined
+  addMetadataFallbackWarnings(warnings)
   if (request.format === "text") {
     const value = `${tab.title ?? ""}\n${tab.url ?? ""}`.trim()
     const text = truncate(
@@ -78,12 +114,6 @@ export function fallbackContent(
   }
   if (request.format === "markdown") {
     const value = `[${tab.title ?? tab.url ?? "Untitled"}](${tab.url ?? ""})`
-    warnings.push({
-      code: "content_unavailable",
-      message:
-        "Markdown output is derived from basic page text; rich Markdown structure is not available in V1.",
-      field: "content.markdown",
-    })
     const markdown = truncate(
       value,
       contentLimit(request, "markdown"),
@@ -99,4 +129,34 @@ export function fallbackContent(
     }
   }
   return undefined
+}
+
+function addMetadataFallbackWarnings(warnings: ContextWarning[]) {
+  addWarningOnce(warnings, {
+    code: "tab_metadata_fallback",
+    message: "Only tab title and URL were available.",
+    field: "content",
+  })
+  addWarningOnce(warnings, {
+    code: "metadata_only",
+    message: "No page or selection content was extracted.",
+    field: "content",
+  })
+  addWarningOnce(warnings, {
+    code: "dom_content_unavailable",
+    message: "DOM page content could not be read.",
+    field: "content",
+  })
+}
+
+function addWarningOnce(warnings: ContextWarning[], warning: ContextWarning) {
+  if (
+    warnings.some(
+      (existing) =>
+        existing.code === warning.code && existing.field === warning.field
+    )
+  ) {
+    return
+  }
+  warnings.push(warning)
 }

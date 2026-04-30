@@ -30,6 +30,16 @@
         "code": "permission_unavailable",
         "message": "Browser denied page-content extraction.",
         "field": "content.selection"
+      },
+      {
+        "code": "injection_unavailable",
+        "message": "Script injection could not run for the target tab.",
+        "field": "content.selection"
+      },
+      {
+        "code": "dom_content_unavailable",
+        "message": "DOM page content could not be read.",
+        "field": "content.selection"
       }
     ],
     "limits": {

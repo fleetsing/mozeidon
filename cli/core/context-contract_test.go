@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	browsercore "github.com/egovelox/mozeidon/browser/core"
 	"github.com/egovelox/mozeidon/browser/core/models"
 	"github.com/egovelox/mozeidon/profiles"
 )
@@ -36,7 +37,7 @@ func TestNewContextFromTabBuildsContractJSON(t *testing.T) {
 	if context.Kind != ContextKind {
 		t.Fatalf("expected kind %q, got %q", ContextKind, context.Kind)
 	}
-	if !context.OK || context.Status != ContextStatusOK {
+	if !context.OK || context.Status != ContextStatusPartial {
 		t.Fatalf("expected ok status, got ok=%v status=%s", context.OK, context.Status)
 	}
 	if context.Source.Output != ContextOutputJSON || context.Source.Format != ContextFormatJSON {
@@ -62,6 +63,17 @@ func TestNewContextFromTabBuildsContractJSON(t *testing.T) {
 	}
 	if context.Capabilities.PageContent != "permission-required" {
 		t.Fatalf("expected pageContent permission-required, got %s", context.Capabilities.PageContent)
+	}
+	if context.Extraction.ContentSource != "tab-metadata" || context.Extraction.DOMRead {
+		t.Fatalf("expected JSON fallback to be marked as tab metadata without DOM read, got %#v", context.Extraction)
+	}
+	if !hasWarning(context.Extraction.Warnings, "tab_metadata_fallback") ||
+		!hasWarning(context.Extraction.Warnings, "metadata_only") ||
+		!hasWarning(context.Extraction.Warnings, "dom_content_unavailable") {
+		t.Fatalf("expected JSON fallback taxonomy warnings, got %#v", context.Extraction.Warnings)
+	}
+	if hasWarning(context.Extraction.Warnings, "content_unavailable") {
+		t.Fatalf("did not expect content_unavailable for JSON metadata fallback, got %#v", context.Extraction.Warnings)
 	}
 
 	if _, err := json.Marshal(context); err != nil {
@@ -108,6 +120,44 @@ func TestFindActiveContextTabFallsBackToAnyActiveTab(t *testing.T) {
 	}
 }
 
+func TestBuildContextPayloadUsesRestrictedPageForSelectorOnRestrictedFallback(t *testing.T) {
+	app := &App{
+		browser: &browsercore.BrowserService{CommandSender: fakeCommandSender{
+			"get-context": []models.CommandResult{},
+			"get-tabs": {commandResult(t, models.Tabs{Items: []models.Tab{{
+				Id:       123,
+				WindowId: 456,
+				Url:      "about:config",
+				Title:    "Advanced Preferences",
+				Active:   true,
+			}}})},
+			"get-windows": {commandResult(t, models.Windows{Items: []models.Window{{
+				Id:            456,
+				IsLastFocused: true,
+			}}})},
+		}},
+	}
+
+	exitCode, payload := app.BuildContextPayload(
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatMarkdown, Selector: "main"},
+		time.Date(2026, 4, 30, 9, 45, 0, 0, time.UTC),
+	)
+
+	contextError, ok := payload.(ZenContextError)
+	if !ok {
+		t.Fatalf("expected context error payload, got %#v", payload)
+	}
+	if exitCode != 3 {
+		t.Fatalf("expected restricted selector exit code 3, got %d", exitCode)
+	}
+	if contextError.Code != "restricted_page" {
+		t.Fatalf("expected restricted_page error, got %#v", contextError)
+	}
+	if contextError.Details["legacyCode"] != "unsupported_page" {
+		t.Fatalf("expected unsupported_page legacy code, got %#v", contextError.Details)
+	}
+}
+
 func TestContextFormatTextPopulatesStructuredText(t *testing.T) {
 	context := NewContextFromTab(
 		models.Tab{Id: 123, WindowId: 456, Url: "https://example.com", Title: "Example", Active: true},
@@ -128,6 +178,14 @@ func TestContextFormatTextPopulatesStructuredText(t *testing.T) {
 	}
 	if context.Extraction.ContentSource != "tab-metadata" || context.Extraction.DOMRead {
 		t.Fatalf("expected text fallback to be marked as tab metadata without DOM read, got %#v", context.Extraction)
+	}
+	if !hasWarning(context.Extraction.Warnings, "tab_metadata_fallback") ||
+		!hasWarning(context.Extraction.Warnings, "metadata_only") ||
+		!hasWarning(context.Extraction.Warnings, "dom_content_unavailable") {
+		t.Fatalf("expected text fallback taxonomy warnings, got %#v", context.Extraction.Warnings)
+	}
+	if hasWarning(context.Extraction.Warnings, "content_unavailable") {
+		t.Fatalf("did not expect content_unavailable for metadata fallback, got %#v", context.Extraction.Warnings)
 	}
 }
 
@@ -187,6 +245,14 @@ func TestContextReportsUnsupportedPage(t *testing.T) {
 	if !hasWarning(context.Extraction.Warnings, "unsupported_page") {
 		t.Fatalf("expected unsupported_page warning, got %#v", context.Extraction.Warnings)
 	}
+	if !hasWarning(context.Extraction.Warnings, "restricted_page") ||
+		!hasWarning(context.Extraction.Warnings, "tab_metadata_fallback") ||
+		!hasWarning(context.Extraction.Warnings, "metadata_only") {
+		t.Fatalf("expected restricted metadata fallback warnings, got %#v", context.Extraction.Warnings)
+	}
+	if hasWarning(context.Extraction.Warnings, "content_unavailable") {
+		t.Fatalf("did not expect content_unavailable for unsupported metadata fallback, got %#v", context.Extraction.Warnings)
+	}
 	if context.Capabilities.PageContent != "unavailable" {
 		t.Fatalf("expected pageContent unavailable, got %s", context.Capabilities.PageContent)
 	}
@@ -195,6 +261,28 @@ func TestContextReportsUnsupportedPage(t *testing.T) {
 	}
 	if context.Content == nil || context.Content.Markdown == nil {
 		t.Fatal("expected title/URL markdown context to remain available")
+	}
+	assertNoDuplicateWarnings(t, context.Extraction.Warnings)
+}
+
+func TestContextDeduplicatesUnsupportedJSONFallbackWarnings(t *testing.T) {
+	context := NewContextFromTab(
+		models.Tab{
+			Id:       123,
+			WindowId: 456,
+			Url:      "about:config",
+			Title:    "Advanced Preferences",
+			Active:   true,
+		},
+		models.Window{Id: 456, IsLastFocused: true},
+		nil,
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatJSON},
+		time.Date(2026, 4, 30, 20, 45, 0, 0, time.UTC),
+	)
+
+	assertNoDuplicateWarnings(t, context.Extraction.Warnings)
+	if countWarning(context.Extraction.Warnings, "dom_content_unavailable", "content") != 1 {
+		t.Fatalf("expected one dom_content_unavailable warning for content, got %#v", context.Extraction.Warnings)
 	}
 }
 
@@ -404,7 +492,9 @@ func TestContextMetadataFallbackOmitsEmptyMetadataWhenPermissionUnavailable(t *t
 		if context.Metadata != nil {
 			t.Fatalf("did not expect empty metadata for %s when permission is unavailable, got %#v", mode, context.Metadata)
 		}
-		if len(context.Extraction.Warnings) != 1 || context.Extraction.Warnings[0].Code != "permission_unavailable" {
+		if !hasWarning(context.Extraction.Warnings, "permission_unavailable") ||
+			!hasWarning(context.Extraction.Warnings, "host_permission_missing") ||
+			!hasWarning(context.Extraction.Warnings, "dom_content_unavailable") {
 			t.Fatalf("expected permission warning for %s, got %#v", mode, context.Extraction.Warnings)
 		}
 	}
@@ -425,7 +515,9 @@ func TestContextSelectionFallbackOmitsCollapsedStateWhenPermissionUnavailable(t 
 	if context.Content != nil {
 		t.Fatalf("did not expect collapsed selection fallback when permission is unavailable, got %#v", context.Content)
 	}
-	if len(context.Extraction.Warnings) != 1 || context.Extraction.Warnings[0].Code != "permission_unavailable" {
+	if !hasWarning(context.Extraction.Warnings, "permission_unavailable") ||
+		!hasWarning(context.Extraction.Warnings, "host_permission_missing") ||
+		!hasWarning(context.Extraction.Warnings, "dom_content_unavailable") {
 		t.Fatalf("expected permission warning, got %#v", context.Extraction.Warnings)
 	}
 }
@@ -492,6 +584,48 @@ func hasWarning(warnings []ZenExtractionWarning, code string) bool {
 		}
 	}
 	return false
+}
+
+func countWarning(warnings []ZenExtractionWarning, code string, field string) int {
+	count := 0
+	for _, warning := range warnings {
+		if warning.Code == code && warning.Field == field {
+			count++
+		}
+	}
+	return count
+}
+
+func assertNoDuplicateWarnings(t *testing.T, warnings []ZenExtractionWarning) {
+	t.Helper()
+	seen := map[string]struct{}{}
+	for _, warning := range warnings {
+		key := warning.Code + "\x00" + warning.Field
+		if _, ok := seen[key]; ok {
+			t.Fatalf("duplicate warning code/field %q/%q in %#v", warning.Code, warning.Field, warnings)
+		}
+		seen[key] = struct{}{}
+	}
+}
+
+type fakeCommandSender map[string][]models.CommandResult
+
+func (sender fakeCommandSender) Send(command models.Command) <-chan models.CommandResult {
+	results := make(chan models.CommandResult, len(sender[command.Command]))
+	for _, result := range sender[command.Command] {
+		results <- result
+	}
+	close(results)
+	return results
+}
+
+func commandResult(t *testing.T, value interface{}) models.CommandResult {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("expected command result to marshal: %v", err)
+	}
+	return models.CommandResult{Data: data}
 }
 
 func hasString(values []string, expected string) bool {

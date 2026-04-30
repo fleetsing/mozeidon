@@ -17,9 +17,7 @@ const {
 const {
   createInjectedExtractorCode,
 } = require("../.test-dist/src/services/context/injected-extractor.js")
-const {
-  contextError,
-} = require("../.test-dist/src/services/context/errors.js")
+const { contextError } = require("../.test-dist/src/services/context/errors.js")
 const {
   permissionFallback,
   unsupportedFallback,
@@ -145,7 +143,13 @@ test("truncation helpers preserve byte limits and warning fields", () => {
   assert.deepEqual(warnings, [
     {
       code: "content_truncated",
-      message: "Context content was truncated to fit the configured size limit.",
+      message:
+        "Context content was truncated to fit the configured size limit.",
+      field: "content.text",
+    },
+    {
+      code: "field_truncated",
+      message: "The field was truncated to fit the configured size limit.",
       field: "content.text",
     },
   ])
@@ -186,6 +190,34 @@ test("golden fixture preserves html_sanitizer_missing error shape", () => {
   )
 })
 
+test("restricted page selector errors use restricted_page taxonomy", () => {
+  assert.deepEqual(
+    asJsonValue(
+      contextError(
+        "restricted_page",
+        "Selector extraction is not available on privileged or restricted browser pages.",
+        {
+          selector: "main",
+          url: "about:config",
+          legacyCode: "unsupported_page",
+        }
+      )
+    ),
+    {
+      ok: false,
+      status: "error",
+      code: "restricted_page",
+      message:
+        "Selector extraction is not available on privileged or restricted browser pages.",
+      details: {
+        selector: "main",
+        url: "about:config",
+        legacyCode: "unsupported_page",
+      },
+    }
+  )
+})
+
 test("golden fixture preserves permission fallback selection payload", () => {
   const request = parseContextRequest(
     JSON.stringify({ mode: "selection" })
@@ -198,6 +230,41 @@ test("golden fixture preserves permission fallback selection payload", () => {
   )
 
   assert.deepEqual(asJsonValue(payload), permissionSelection)
+})
+
+test("active permission fallback labels metadata-only content without content_unavailable", () => {
+  const request = parseContextRequest(
+    JSON.stringify({ mode: "active", format: "markdown" })
+  ).request
+  const payload = buildPayload(
+    request,
+    tab(),
+    window,
+    permissionFallback(request, "Browser denied page-content extraction.")
+  )
+  const warningCodes = payload.extraction.warnings.map(
+    (warning) => warning.code
+  )
+
+  assert.equal(payload.extraction.contentSource, "tab-metadata")
+  assert.equal(payload.extraction.domRead, false)
+  assert.equal(warningCodes.includes("permission_unavailable"), true)
+  assert.equal(warningCodes.includes("injection_unavailable"), true)
+  assert.equal(warningCodes.includes("dom_content_unavailable"), true)
+  assert.equal(warningCodes.includes("tab_metadata_fallback"), true)
+  assert.equal(warningCodes.includes("metadata_only"), true)
+  assert.equal(warningCodes.includes("content_unavailable"), false)
+})
+
+test("injected Markdown warning code is degraded but usable", () => {
+  const request = parseContextRequest(
+    JSON.stringify({ mode: "active", format: "markdown" })
+  ).request
+  const code = createInjectedExtractorCode(request)
+
+  assert.equal(code.includes("markdown_derived_from_text"), true)
+  assert.equal(code.includes("markdown_structure_unavailable"), true)
+  assert.equal(code.includes("Markdown output is derived"), false)
 })
 
 test("golden fixture preserves unsupported page Markdown fallback payload", () => {

@@ -47,9 +47,19 @@ export type RaycastZenContext = {
   selectionText?: string;
   isDomSelection?: boolean;
   isMetadataOnly?: boolean;
+  contentUsability?: ZenContextContentUsability;
   warnings: string[];
   raw: ZenContext;
 };
+
+export type ZenContextContentUsability =
+  | "usable-page-content"
+  | "usable-selection"
+  | "usable-degraded-content"
+  | "metadata-only"
+  | "empty"
+  | "unavailable"
+  | "error";
 
 export class ZenContextError extends Error {
   constructor(
@@ -101,6 +111,7 @@ export function buildActiveContextArgs(format: "markdown" | "text" | "json"): st
 }
 
 export function parseRaycastZenContext(context: ZenContext): RaycastZenContext {
+  const contentUsability = classifyZenContextContent(context);
   const parsed: RaycastZenContext = {
     title: trimToText(context.page?.title) ?? trimToText(context.tab?.title),
     url: trimToText(context.page?.url) ?? trimToText(context.tab?.url),
@@ -108,6 +119,7 @@ export function parseRaycastZenContext(context: ZenContext): RaycastZenContext {
     selectionText: trimToText(context.content?.selection?.text),
     isDomSelection: isDomSelection(context),
     isMetadataOnly: isMetadataOnlyContext(context),
+    contentUsability,
     warnings: getContextWarnings(context)
       .map((warning) => getWarningCode(warning))
       .filter(isString),
@@ -142,7 +154,18 @@ export function buildSourceAttributedMarkdown(context: Pick<RaycastZenContext, "
 
 export function requireRealMarkdownContext(context: Pick<RaycastZenContext, "markdown" | "isMetadataOnly">): string {
   const markdown = trimToText(context.markdown);
-  if (!markdown || context.isMetadataOnly) {
+  const contentUsability =
+    "contentUsability" in context
+      ? (context as Pick<RaycastZenContext, "contentUsability">).contentUsability
+      : undefined;
+  if (
+    !markdown ||
+    context.isMetadataOnly ||
+    contentUsability === "metadata-only" ||
+    contentUsability === "empty" ||
+    contentUsability === "unavailable" ||
+    contentUsability === "error"
+  ) {
     throw new ZenContextError(
       "content_unavailable",
       "Active page content is unavailable. Check Zen context permissions or page support.",
@@ -158,6 +181,7 @@ export function isMetadataOnlyContext(context: ZenContext | undefined): boolean 
   const warningCodes = getContextWarnings(context).map(getWarningCode);
   return (
     context?.extraction?.contentSource === "tab-metadata" ||
+    warningCodes.includes("tab_metadata_fallback") ||
     warningCodes.includes("metadata_only") ||
     warningCodes.includes("tab_metadata_only")
   );
@@ -167,9 +191,44 @@ export function isRecoverableSelectionCode(code: string | undefined): boolean {
   return (
     code === undefined ||
     code === "permission_unavailable" ||
+    code === "host_permission_missing" ||
+    code === "active_tab_grant_missing" ||
+    code === "dom_content_unavailable" ||
+    code === "injection_unavailable" ||
+    code === "selection_unavailable" ||
     code === "unsupported_selection" ||
     code === "no_selection"
   );
+}
+
+export function classifyZenContextContent(context: ZenContext | undefined): ZenContextContentUsability {
+  if (!context) return "unavailable";
+  if (context.ok === false || context.status === "error") return "error";
+  if (context.status === "empty") return "empty";
+  if (isMetadataOnlyContext(context)) return "metadata-only";
+
+  const warningCodes = getContextWarnings(context).map(getWarningCode);
+  const markdown = getContentValue(context.content?.markdown);
+  const text = getContentValue(context.content?.text);
+  const selectionText = trimToText(context.content?.selection?.text);
+  const contentSource = context.extraction?.contentSource;
+
+  if (selectionText && isDomSelection(context)) return "usable-selection";
+  if (selectionText && (contentSource === "selection" || contentSource === "focused-input")) return "usable-selection";
+
+  const hasContent = Boolean(markdown || text);
+  const isDomPageContent =
+    context.extraction?.domRead === true && (contentSource === "document" || contentSource === "selector");
+  const isDegraded =
+    warningCodes.includes("markdown_derived_from_text") ||
+    warningCodes.includes("reader_markdown_unavailable") ||
+    warningCodes.includes("markdown_structure_unavailable");
+
+  if (hasContent && isDegraded) return "usable-degraded-content";
+  if (hasContent && isDomPageContent) return "usable-page-content";
+  if (hasContent && contentSource !== "tab-metadata") return "usable-page-content";
+
+  return "unavailable";
 }
 
 function isRecoverableContextError(code: string | undefined): boolean {
