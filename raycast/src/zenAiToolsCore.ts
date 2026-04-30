@@ -1,5 +1,6 @@
 import type { MozeidonTab } from "./interfaces";
 import {
+  classifyZenContextContent,
   getContentValue,
   isRecoverableSelectionCode,
   requireRealMarkdownContext,
@@ -392,16 +393,24 @@ function mapContextOutput(
 }
 
 function requireRealContentContext(context: RaycastZenContext, format: "markdown" | "text" | "json"): void {
-  if (format === "markdown") {
-    requireRealMarkdownContext(context);
-    return;
-  }
-
-  if (context.isMetadataOnly) {
+  const contentUsability = context.contentUsability ?? classifyZenContextContent(context.raw);
+  if (contentUsability === "metadata-only" || contentUsability === "empty" || contentUsability === "unavailable") {
     throw new ZenToolError(
       "content_unavailable",
       "Active page content is unavailable. Check Zen context permissions or page support.",
     );
+  }
+  if (contentUsability === "error") {
+    throw new ZenToolError(
+      context.raw.error?.code ?? "content_unavailable",
+      context.raw.error?.message ??
+        "Active page content is unavailable. Check Zen context permissions or page support.",
+    );
+  }
+
+  if (format === "markdown") {
+    requireRealMarkdownContext(context);
+    return;
   }
 
   if (format === "text" && !getContentValue(context.raw.content?.text) && !trimToText(context.markdown)) {

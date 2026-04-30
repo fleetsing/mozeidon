@@ -72,9 +72,13 @@ export async function getContext(port: Port, { args }: Command) {
       port.postMessage(
         Response.data(
           contextError(
-            "unsupported_page",
-            "Selector extraction is not available on privileged or unsupported browser pages.",
-            { selector: request.selector, url: activeTab.url }
+            "restricted_page",
+            "Selector extraction is not available on privileged or restricted browser pages.",
+            {
+              selector: request.selector,
+              url: activeTab.url,
+              legacyCode: "unsupported_page",
+            }
           )
         )
       )

@@ -10,8 +10,12 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
 
   function addWarning(code: string, message: string, field?: string) {
     warnings.push({ code, message, field })
-    if (code === "content_truncated" || code === "metadata_truncated") {
-      if (field) truncationFields.push(field)
+    if (
+      code === "content_truncated" ||
+      code === "metadata_truncated" ||
+      code === "field_truncated"
+    ) {
+      if (field && !truncationFields.includes(field)) truncationFields.push(field)
     }
   }
 
@@ -30,6 +34,11 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
       currentBytes += charBytes
     }
     addWarning("content_truncated", "Context content was truncated.", field)
+    addWarning(
+      "field_truncated",
+      "The field was truncated to fit the configured size limit.",
+      field
+    )
     return { value: output, length: output.length, truncated: true }
   }
 
@@ -65,7 +74,7 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
       return new URL(value, document.baseURI).toString()
     } catch (_) {
       addWarning(
-        "content_unavailable",
+        "field_unavailable",
         "A page-provided URL could not be resolved.",
         field
       )
@@ -384,8 +393,13 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
     }
   } else if (request.format === "markdown") {
     addWarning(
-      "content_unavailable",
-      "Markdown output is derived from basic page text; rich Markdown structure is not available in V1.",
+      "markdown_derived_from_text",
+      "Markdown was derived from readable page text.",
+      "content.markdown"
+    )
+    addWarning(
+      "markdown_structure_unavailable",
+      "Some document structure could not be preserved.",
       "content.markdown"
     )
     const value = truncateValue(

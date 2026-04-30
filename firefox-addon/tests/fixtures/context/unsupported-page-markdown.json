@@ -39,9 +39,24 @@
         "field": "page.url"
       },
       {
-        "code": "content_unavailable",
-        "message": "Markdown output is derived from basic page text; rich Markdown structure is not available in V1.",
-        "field": "content.markdown"
+        "code": "restricted_page",
+        "message": "DOM extraction is not available on privileged or restricted browser pages.",
+        "field": "page.url"
+      },
+      {
+        "code": "dom_content_unavailable",
+        "message": "DOM page content could not be read.",
+        "field": "content"
+      },
+      {
+        "code": "tab_metadata_fallback",
+        "message": "Only tab title and URL were available.",
+        "field": "content"
+      },
+      {
+        "code": "metadata_only",
+        "message": "No page or selection content was extracted.",
+        "field": "content"
       }
     ],
     "limits": {

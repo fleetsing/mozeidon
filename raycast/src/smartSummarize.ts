@@ -1,4 +1,5 @@
 import {
+  classifyZenContextContent,
   getContentValue,
   isMetadataOnlyContext as isZenMetadataOnlyContext,
   isRecoverableSelectionCode,
@@ -208,7 +209,15 @@ function getZenDomSelectionText(context: ZenContext | undefined): string | undef
 
 function getUsablePageMarkdown(context: ZenContext | undefined): string {
   const markdown = getContentValue(context?.content?.markdown);
-  if (!markdown || isZenMetadataOnlyContext(context)) {
+  const contentUsability = classifyZenContextContent(context);
+  if (
+    !markdown ||
+    isZenMetadataOnlyContext(context) ||
+    contentUsability === "metadata-only" ||
+    contentUsability === "empty" ||
+    contentUsability === "unavailable" ||
+    contentUsability === "error"
+  ) {
     throw new SmartSummarizeError(
       "content_unavailable",
       "Active page content is unavailable. Check Zen context permissions or page support.",

@@ -353,9 +353,10 @@ func (a *App) BuildContextPayload(options ContextOptions, capturedAt time.Time) 
 
 	if options.Selector != "" {
 		if isUnsupportedContextURL(activeTab.Url) {
-			return 3, NewContextError(options, capturedAt, "unsupported_page", "Selector extraction is not available on privileged or unsupported browser pages.", map[string]interface{}{
-				"selector": options.Selector,
-				"url":      activeTab.Url,
+			return 3, NewContextError(options, capturedAt, "restricted_page", "Selector extraction is not available on privileged or restricted browser pages.", map[string]interface{}{
+				"selector":   options.Selector,
+				"url":        activeTab.Url,
+				"legacyCode": "unsupported_page",
 			})
 		}
 		return 3, NewContextError(options, capturedAt, "permission_denied", "Selector extraction requires page-content permission for the active tab.", map[string]interface{}{
@@ -417,13 +418,21 @@ func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.P
 			Code:    "unsupported_page",
 			Message: "DOM extraction is not available on privileged or unsupported browser pages.",
 			Field:   "page.url",
+		}, ZenExtractionWarning{
+			Code:    "restricted_page",
+			Message: "DOM extraction is not available on privileged or restricted browser pages.",
+			Field:   "page.url",
+		}, ZenExtractionWarning{
+			Code:    "dom_content_unavailable",
+			Message: "DOM page content could not be read.",
+			Field:   "content",
 		})
 	}
 
 	var content *ZenContentInfo
 	var truncationFields []string
+	var contentWarnings []ZenExtractionWarning
 	if options.Mode == ContextModeActive {
-		var contentWarnings []ZenExtractionWarning
 		content, contentWarnings, truncationFields = contextContentForFormat(tab, options.Format, options.MaxBytes)
 		warnings = append(warnings, contentWarnings...)
 	}
@@ -616,7 +625,7 @@ func contextExitCode(code string) int {
 	switch code {
 	case "invalid_format", "invalid_context_request", "selector_invalid", "selector_unsupported", "html_sanitizer_missing":
 		return 2
-	case "permission_denied", "unsupported_page":
+	case "permission_denied", "unsupported_page", "restricted_page", "host_permission_missing", "active_tab_grant_missing", "injection_unavailable":
 		return 3
 	case "no_active_window", "no_active_tab":
 		return 4
@@ -632,17 +641,41 @@ func contextWarningsForMode(mode ContextMode) []ZenExtractionWarning {
 			Code:    "permission_unavailable",
 			Message: "Selection extraction requires page-content permission for the active tab.",
 			Field:   "content.selection",
+		}, {
+			Code:    "host_permission_missing",
+			Message: "Host permission is required to inspect the active tab selection.",
+			Field:   "content.selection",
+		}, {
+			Code:    "dom_content_unavailable",
+			Message: "DOM page content could not be read.",
+			Field:   "content.selection",
 		}}
 	case ContextModeMetadata:
 		return []ZenExtractionWarning{{
 			Code:    "permission_unavailable",
 			Message: "DOM metadata extraction requires page-content permission for the active tab.",
 			Field:   "metadata",
+		}, {
+			Code:    "host_permission_missing",
+			Message: "Host permission is required to inspect active tab metadata.",
+			Field:   "metadata",
+		}, {
+			Code:    "dom_content_unavailable",
+			Message: "DOM page content could not be read.",
+			Field:   "metadata",
 		}}
 	case ContextModeLinks:
 		return []ZenExtractionWarning{{
 			Code:    "permission_unavailable",
 			Message: "Link extraction requires page-content permission for the active tab.",
+			Field:   "metadata.links",
+		}, {
+			Code:    "host_permission_missing",
+			Message: "Host permission is required to inspect active tab links.",
+			Field:   "metadata.links",
+		}, {
+			Code:    "dom_content_unavailable",
+			Message: "DOM page content could not be read.",
 			Field:   "metadata.links",
 		}}
 	default:
@@ -652,22 +685,28 @@ func contextWarningsForMode(mode ContextMode) []ZenExtractionWarning {
 
 func contextContentForFormat(tab models.Tab, format ContextFormat, maxBytes int) (*ZenContentInfo, []ZenExtractionWarning, []string) {
 	switch format {
+	case ContextFormatJSON:
+		return nil, metadataFallbackWarnings("content"), nil
 	case ContextFormatMarkdown:
 		value := fmt.Sprintf("[%s](%s)", tab.Title, tab.Url)
 		value, truncated := truncateStringByBytes(value, contentLimit(maxBytes, DefaultMarkdownMax))
 		content := &ZenContentInfo{Markdown: &ZenMarkdownContent{Value: value, Length: len(value), Truncated: truncated}}
+		warnings := metadataFallbackWarnings("content.markdown")
 		if truncated {
-			return content, contentTruncatedWarning("content.markdown"), []string{"content.markdown"}
+			warnings = append(warnings, contentTruncatedWarning("content.markdown")...)
+			return content, warnings, []string{"content.markdown"}
 		}
-		return content, nil, nil
+		return content, warnings, nil
 	case ContextFormatText:
 		value := strings.TrimSpace(fmt.Sprintf("%s\n%s", tab.Title, tab.Url))
 		value, truncated := truncateStringByBytes(value, contentLimit(maxBytes, DefaultTextBytes))
 		content := &ZenContentInfo{Text: &ZenTextContent{Value: value, Length: len(value), Truncated: truncated}}
+		warnings := metadataFallbackWarnings("content.text")
 		if truncated {
-			return content, contentTruncatedWarning("content.text"), []string{"content.text"}
+			warnings = append(warnings, contentTruncatedWarning("content.text")...)
+			return content, warnings, []string{"content.text"}
 		}
-		return content, nil, nil
+		return content, warnings, nil
 	default:
 		return nil, nil, nil
 	}
@@ -686,7 +725,7 @@ func contextMetadataForMode(mode ContextMode) *ZenMetadataInfo {
 
 func contextExtraction(options ContextOptions, warnings []ZenExtractionWarning, truncationFields []string) ZenExtractionInfo {
 	contentSource := ""
-	if options.Mode == ContextModeActive && (options.Format == ContextFormatText || options.Format == ContextFormatMarkdown) {
+	if options.Mode == ContextModeActive && (options.Format == ContextFormatJSON || options.Format == ContextFormatText || options.Format == ContextFormatMarkdown) {
 		contentSource = "tab-metadata"
 	}
 	return ZenExtractionInfo{
@@ -788,6 +827,26 @@ func contentTruncatedWarning(field string) []ZenExtractionWarning {
 	return []ZenExtractionWarning{{
 		Code:    "content_truncated",
 		Message: "Context content was truncated to fit the configured size limit.",
+		Field:   field,
+	}, {
+		Code:    "field_truncated",
+		Message: "The field was truncated to fit the configured size limit.",
+		Field:   field,
+	}}
+}
+
+func metadataFallbackWarnings(field string) []ZenExtractionWarning {
+	return []ZenExtractionWarning{{
+		Code:    "tab_metadata_fallback",
+		Message: "Only tab title and URL were available.",
+		Field:   field,
+	}, {
+		Code:    "metadata_only",
+		Message: "No page or selection content was extracted.",
+		Field:   field,
+	}, {
+		Code:    "dom_content_unavailable",
+		Message: "DOM page content could not be read.",
 		Field:   field,
 	}}
 }
