@@ -6,7 +6,8 @@
   "license": "MIT",
   "scripts": {
     "prettier": "prettier --write 'src/**/*.ts'",
-    "build": "webpack --devtool false"
+    "build": "webpack --devtool false",
+    "test": "tsc -p tsconfig.test.json && node --test tests/*.test.js"
   },
   "engines": {
     "node": ">=20",

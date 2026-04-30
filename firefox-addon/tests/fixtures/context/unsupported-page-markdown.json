@@ -1,0 +1,80 @@
+{
+  "ok": true,
+  "status": "partial",
+  "tab": {
+    "id": 7,
+    "groupId": -1,
+    "windowId": 3,
+    "title": "Example Article",
+    "pinned": false,
+    "url": "about:config",
+    "active": true,
+    "domain": "",
+    "lastAccessed": 1235,
+    "index": 2
+  },
+  "window": {
+    "id": 3,
+    "isLastFocused": true
+  },
+  "page": {
+    "url": "about:config",
+    "title": "Example Article",
+    "domain": ""
+  },
+  "content": {
+    "markdown": {
+      "value": "[Example Article](about:config)",
+      "length": 31,
+      "truncated": false
+    }
+  },
+  "extraction": {
+    "mode": "active",
+    "domRead": false,
+    "warnings": [
+      {
+        "code": "unsupported_page",
+        "message": "DOM extraction is not available on privileged or unsupported browser pages.",
+        "field": "page.url"
+      },
+      {
+        "code": "content_unavailable",
+        "message": "Markdown output is derived from basic page text; rich Markdown structure is not available in V1.",
+        "field": "content.markdown"
+      }
+    ],
+    "limits": {
+      "maxBytes": 1000000,
+      "maxTextBytes": 50000,
+      "maxHtmlBytes": 250000,
+      "maxMarkdownBytes": 50000,
+      "maxLinks": 500,
+      "maxImages": 200,
+      "maxJsonLdBytes": 100000
+    },
+    "truncation": {
+      "truncated": false,
+      "fields": []
+    },
+    "contentSource": "tab-metadata"
+  },
+  "permissions": {
+    "canReadTabMetadata": true,
+    "hasDomAccess": false,
+    "hasActiveTabGrant": false,
+    "hasHostPermission": false,
+    "canReadActiveTab": false,
+    "canReadSelection": false,
+    "canReadPageContent": false,
+    "canReadMetadata": false,
+    "canReadLinks": false
+  },
+  "capabilities": {
+    "activeTab": "available",
+    "selection": "unavailable",
+    "pageContent": "unavailable",
+    "metadata": "unavailable",
+    "links": "unavailable"
+  }
+}
