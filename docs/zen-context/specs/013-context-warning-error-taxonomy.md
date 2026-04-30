@@ -53,7 +53,7 @@ AI commands need to distinguish:
 
 ## Non-Goals
 
-- No code implementation in this task.
+- No additional feature implementation beyond taxonomy cleanup and the related contract alignment described in this spec.
 - No native messenger changes.
 - No new browser permissions.
 - No site adapters.

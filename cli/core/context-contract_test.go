@@ -262,6 +262,28 @@ func TestContextReportsUnsupportedPage(t *testing.T) {
 	if context.Content == nil || context.Content.Markdown == nil {
 		t.Fatal("expected title/URL markdown context to remain available")
 	}
+	assertNoDuplicateWarnings(t, context.Extraction.Warnings)
+}
+
+func TestContextDeduplicatesUnsupportedJSONFallbackWarnings(t *testing.T) {
+	context := NewContextFromTab(
+		models.Tab{
+			Id:       123,
+			WindowId: 456,
+			Url:      "about:config",
+			Title:    "Advanced Preferences",
+			Active:   true,
+		},
+		models.Window{Id: 456, IsLastFocused: true},
+		nil,
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatJSON},
+		time.Date(2026, 4, 30, 20, 45, 0, 0, time.UTC),
+	)
+
+	assertNoDuplicateWarnings(t, context.Extraction.Warnings)
+	if countWarning(context.Extraction.Warnings, "dom_content_unavailable", "content") != 1 {
+		t.Fatalf("expected one dom_content_unavailable warning for content, got %#v", context.Extraction.Warnings)
+	}
 }
 
 func TestContextDoesNotTreatAboutBlankAsUnsupported(t *testing.T) {
@@ -562,6 +584,28 @@ func hasWarning(warnings []ZenExtractionWarning, code string) bool {
 		}
 	}
 	return false
+}
+
+func countWarning(warnings []ZenExtractionWarning, code string, field string) int {
+	count := 0
+	for _, warning := range warnings {
+		if warning.Code == code && warning.Field == field {
+			count++
+		}
+	}
+	return count
+}
+
+func assertNoDuplicateWarnings(t *testing.T, warnings []ZenExtractionWarning) {
+	t.Helper()
+	seen := map[string]struct{}{}
+	for _, warning := range warnings {
+		key := warning.Code + "\x00" + warning.Field
+		if _, ok := seen[key]; ok {
+			t.Fatalf("duplicate warning code/field %q/%q in %#v", warning.Code, warning.Field, warnings)
+		}
+		seen[key] = struct{}{}
+	}
 }
 
 type fakeCommandSender map[string][]models.CommandResult

@@ -436,6 +436,7 @@ func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.P
 		content, contentWarnings, truncationFields = contextContentForFormat(tab, options.Format, options.MaxBytes)
 		warnings = append(warnings, contentWarnings...)
 	}
+	warnings = dedupeContextWarnings(warnings)
 
 	status := ContextStatusOK
 	if len(warnings) > 0 {
@@ -849,6 +850,24 @@ func metadataFallbackWarnings(field string) []ZenExtractionWarning {
 		Message: "DOM page content could not be read.",
 		Field:   field,
 	}}
+}
+
+func dedupeContextWarnings(warnings []ZenExtractionWarning) []ZenExtractionWarning {
+	if len(warnings) < 2 {
+		return warnings
+	}
+
+	deduped := make([]ZenExtractionWarning, 0, len(warnings))
+	seen := make(map[string]struct{}, len(warnings))
+	for _, warning := range warnings {
+		key := warning.Code + "\x00" + warning.Field
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, warning)
+	}
+	return deduped
 }
 
 func contentLimit(maxBytes int, fieldDefault int) int {
