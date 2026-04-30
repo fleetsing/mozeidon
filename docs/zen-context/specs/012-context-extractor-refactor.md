@@ -398,7 +398,7 @@ cd raycast && npm run build
 ## Acceptance Criteria
 
 - `docs/zen-context/specs/012-context-extractor-refactor.md` exists and documents the refactor plan.
-- Implementation has not started until this spec is approved.
+- This spec records the approved refactor scope and resulting constraints.
 - `firefox-addon/src/services/context.ts` remains the handler-facing public service entry point.
 - Context implementation is split into smaller modules under `firefox-addon/src/services/context/`.
 - No new production dependencies are added.
