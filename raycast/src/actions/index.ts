@@ -1,6 +1,7 @@
 import { runAppleScript } from "@raycast/utils";
 import type { HistoryItem, MozeidonBookmark, MozeidonGroup, MozeidonTab, Tab, TabState } from "../interfaces";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
+import { buildBrowserOpenArgs } from "../browserOpenCommand";
 import {
   FIREFOX_OPEN_COMMAND,
   MOZEIDON,
@@ -160,11 +161,16 @@ export function fetchTabGroups() {
 }
 
 export function openFirefox() {
-  execSync(FIREFOX_OPEN_COMMAND);
+  runBrowserOpenCommand();
 }
 
 export function openFirefoxAtMozeidonPage() {
-  execSync(`${FIREFOX_OPEN_COMMAND} ${MOZEIDON_DOCUMENTATION_URL}`);
+  runBrowserOpenCommand([MOZEIDON_DOCUMENTATION_URL]);
+}
+
+function runBrowserOpenCommand(extraArgs: string[] = []): void {
+  const [file, ...args] = buildBrowserOpenArgs(FIREFOX_OPEN_COMMAND, extraArgs);
+  execFileSync(file, args);
 }
 
 export async function startFirefox() {

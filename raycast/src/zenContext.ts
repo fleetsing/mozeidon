@@ -18,6 +18,8 @@ export type ZenContext = {
     url?: string;
   };
   tab?: {
+    id?: number;
+    windowId?: number;
     title?: string;
     url?: string;
   };
@@ -43,6 +45,8 @@ export type ZenContext = {
 export type RaycastZenContext = {
   title?: string;
   url?: string;
+  tabId?: number;
+  windowId?: number;
   markdown?: string;
   selectionText?: string;
   isDomSelection?: boolean;
@@ -115,6 +119,8 @@ export function parseRaycastZenContext(context: ZenContext): RaycastZenContext {
   const parsed: RaycastZenContext = {
     title: trimToText(context.page?.title) ?? trimToText(context.tab?.title),
     url: trimToText(context.page?.url) ?? trimToText(context.tab?.url),
+    tabId: context.tab?.id,
+    windowId: context.tab?.windowId,
     markdown: getContentValue(context.content?.markdown),
     selectionText: trimToText(context.content?.selection?.text),
     isDomSelection: isDomSelection(context),

@@ -40,7 +40,7 @@ This repository currently contains:
 
 - Mozeidon CLI in `cli/`.
 - Firefox-family add-on used by Zen in `firefox-addon/`.
-- Chromium add-on in `chrome-addon/`.
+- Chromium add-on in `chrome-addon/` (inherited from upstream; not maintained in this fork and without the context extraction service).
 - Raycast extension in `raycast/`.
 - Zen compatibility documentation in `README.md`.
 
