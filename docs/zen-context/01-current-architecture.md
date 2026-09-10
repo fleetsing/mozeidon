@@ -71,7 +71,7 @@ The add-on is the right layer only when data cannot be derived from existing CLI
 
 Location: `chrome-addon/`
 
-The Chromium add-on mirrors Firefox-family behavior where possible. It is useful for cross-browser context but is not the first target for Zen Context.
+The Chromium add-on is inherited from upstream and is not maintained in this fork. It mirrors basic tab/bookmark behavior but has no Zen Context extraction service, so the context API and page-content features do not work against Chromium browsers.
 
 ### Native App
 
