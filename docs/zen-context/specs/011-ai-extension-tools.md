@@ -404,7 +404,7 @@ Behavior:
 
 Description:
 
-Get content for a Zen tab using the context API. Prefer the active tab; when a non-active tab is requested, focus it only if existing safe Mozeidon tab switching can identify the tab unambiguously.
+Get content for a Zen tab using the context API. Prefer the active tab; when a non-active tab is requested, use the target-tab stabilization strategy defined in Spec 014 to focus it, verify the switch actually landed, and read verified content.
 
 Input schema:
 
@@ -415,6 +415,7 @@ type ZenGetTabContentInput = {
   url?: string;
   format?: "markdown" | "text";
   requireContent?: boolean;
+  restoreFocus?: boolean;
 };
 ```
 
@@ -423,13 +424,15 @@ Defaults:
 - active tab when no `tabId`/`windowId`/`url` is provided;
 - `format: "markdown"`
 - `requireContent: true`
+- `restoreFocus: true`
 
 Behavior:
 
 - If no target is provided, call active context directly.
-- If `tabId` and `windowId` identify an open tab, use existing safe tab switching before context retrieval.
+- If `tabId` and `windowId` identify an open tab, use the Spec 014 stabilization flow: switch, verify activation, extract context, verify the extracted content reports the same tab, then restore the original focus by default.
 - If only `url` is provided, first search open tabs for an exact URL match.
 - If the target cannot be identified unambiguously, return `ok: false` with `ambiguous_tab` or `tab_not_found`.
+- If activation cannot be verified or the extracted content reports a different tab, return `ok: false` rather than ambiguous content (Spec 014 codes: `tab_activation_failed`, `activation_timeout`, `target_tab_mismatch`).
 - Do not scrape inactive tabs through new add-on permissions.
 
 Output:
@@ -440,8 +443,17 @@ type ZenGetTabContentData = {
   format: "markdown" | "text";
   markdown?: string;
   text?: string;
+  requestedTab?: TargetTabIdentity;
+  actualTab?: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  focusChanged: boolean;
+  restoreFocus: boolean;
+  focusRestored?: boolean;
+  activation?: TargetTabActivation;
 };
 ```
+
+See Spec 014 for the full `TargetTabIdentity`/`TargetTabActivation` shapes and failure-code taxonomy.
 
 ### `zen_open_or_focus_url`
 

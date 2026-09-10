@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/mozeidonClient.ts", "tests/**/*.ts"],
+  "include": ["src/mozeidonClient.ts", "src/browserOpenCommand.ts", "tests/**/*.ts"],
   "compilerOptions": {
     "outDir": ".test-dist",
     "rootDir": ".",

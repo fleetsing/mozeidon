@@ -1,2 +1,6 @@
 node_modules
 .DS_Store
+
+# Built CLI binaries (build with `make build-cli` or `go build`)
+/mozeidon
+/cli/mozeidon

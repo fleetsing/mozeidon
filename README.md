@@ -74,6 +74,8 @@ Zen Context still uses the Mozeidon architecture:
 
 The native app is not a feature surface in this fork. Feature behavior is implemented in the Raycast extension, CLI, and browser add-on.
 
+Note: `chrome-addon/` is inherited from upstream and is not maintained in this fork. It has no Zen Context extraction service, so the `mozeidon context` commands and page-content Raycast/AI features do not work against Chromium browsers.
+
 ## Requirements
 
 These instructions assume:

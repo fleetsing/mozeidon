@@ -22,3 +22,4 @@ Working agreements:
 - Do not add production dependencies without justification.
 - Run relevant tests, linting, and builds before calling implementation work complete.
 - Summarize changed files, validation results, and unresolved risks.
+- This repo has two remotes: `origin` (`fleetsing/mozeidon`, this fork) and `upstream` (`egovelox/mozeidon`, read-only reference). Never push branches or open pull requests against `upstream`. Branches, pushes, and PRs (`gh pr create`) must target `origin`/`fleetsing/mozeidon`. `upstream`'s push URL is intentionally disabled; `gh repo set-default` is set to `fleetsing/mozeidon` so `gh pr create` defaults there without needing `--repo`.
