@@ -61,7 +61,7 @@ test("AI tool definitions have clear names, descriptions, and small schemas", ()
     assert.equal(manifestTool?.description, tool.description);
     assert.equal(tool.name.startsWith("zen_"), true);
     assert.equal(tool.description.length > 20, true);
-    assert.equal(Object.keys(tool.inputSchema).length <= 5, true);
+    assert.equal(Object.keys(tool.inputSchema).length <= 6, true);
   }
 });
 
@@ -324,21 +324,29 @@ test("zen_search_tabs returns a structured error when query input is missing", a
   if (!result.ok) assert.equal(result.error.code, "invalid_input");
 });
 
-test("zen_get_tab_content switches to an unambiguous tab before reading context", async () => {
+test("zen_get_tab_content switches to an unambiguous tab, verifies it, and restores focus", async () => {
   const switched: string[] = [];
   const result = await zenGetTabContent(
     { tabId: 2, windowId: 20 },
     createDependencies({
       tabs: sampleTabs(),
-      contexts: {
-        markdown: context({ title: "GitHub PR", url: "https://github.com/example/pull/1", markdown: "PR markdown" }),
-      },
+      contextForActiveTab: (tab) =>
+        context({ title: tab.title, url: tab.url, tabId: tab.id, windowId: tab.windowId, markdown: "PR markdown" }),
       switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
     }),
   );
 
-  assert.deepEqual(switched, ["20:2"]);
+  assert.deepEqual(switched, ["20:2", "10:1"]);
   assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.data.requestedTab, { tabId: 2, windowId: 20, url: "https://github.com/example/pull/1", title: "GitHub PR" });
+    assert.deepEqual(result.data.actualTab, { tabId: 2, windowId: 20, url: "https://github.com/example/pull/1", title: "GitHub PR" });
+    assert.deepEqual(result.data.originalTab, { tabId: 1, windowId: 10, url: "https://docs.example.com/oauth", title: "Active Docs" });
+    assert.equal(result.data.focusChanged, true);
+    assert.equal(result.data.restoreFocus, true);
+    assert.equal(result.data.focusRestored, true);
+    assert.equal(result.data.activation?.succeeded, true);
+  }
 });
 
 test("zen_get_tab_content does not refocus a tab that is already active in the focused window", async () => {
@@ -347,15 +355,104 @@ test("zen_get_tab_content does not refocus a tab that is already active in the f
     { tabId: 1, windowId: 10 },
     createDependencies({
       tabs: sampleTabs(),
-      contexts: {
-        markdown: context({ title: "Active Docs", url: "https://docs.example.com/oauth", markdown: "Docs markdown" }),
-      },
+      contextForActiveTab: (tab) =>
+        context({ title: tab.title, url: tab.url, tabId: tab.id, windowId: tab.windowId, markdown: "Docs markdown" }),
       switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
     }),
   );
 
   assert.deepEqual(switched, []);
   assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.focusChanged, false);
+    assert.equal(result.data.focusRestored, undefined);
+    assert.equal(result.data.activation?.attempted, false);
+  }
+});
+
+test("zen_get_tab_content leaves the target tab focused when restoreFocus is false", async () => {
+  const switched: string[] = [];
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20, restoreFocus: false },
+    createDependencies({
+      tabs: sampleTabs(),
+      contextForActiveTab: (tab) =>
+        context({ title: tab.title, url: tab.url, tabId: tab.id, windowId: tab.windowId, markdown: "PR markdown" }),
+      switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
+    }),
+  );
+
+  assert.deepEqual(switched, ["20:2"]);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.restoreFocus, false);
+    assert.equal(result.data.focusRestored, undefined);
+  }
+});
+
+test("zen_get_tab_content fails closed when the switch never activates the requested tab", async () => {
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      applySwitchEffect: false,
+    }),
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "activation_timeout");
+    assert.equal(result.details?.focusChanged, true);
+  }
+});
+
+test("zen_get_tab_content fails closed when the switch command throws", async () => {
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      switchTabError: new Error("switch failed"),
+    }),
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "tab_activation_failed");
+});
+
+test("zen_get_tab_content fails closed when extracted context reports a different tab", async () => {
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      contextForActiveTab: () => context({ title: "Wrong Tab", url: "https://example.com", tabId: 99, windowId: 99 }),
+    }),
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "target_tab_mismatch");
+    assert.deepEqual(result.details?.actualTab, { tabId: 99, windowId: 99, url: "https://example.com", title: "Wrong Tab" });
+  }
+});
+
+test("zen_get_tab_content reports a warning but keeps content when restore focus fails", async () => {
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      contextForActiveTab: (tab) =>
+        context({ title: tab.title, url: tab.url, tabId: tab.id, windowId: tab.windowId, markdown: "PR markdown" }),
+      switchTab: (windowId, tabId) => {
+        if (windowId === 10 && tabId === 1) throw new Error("restore failed");
+      },
+    }),
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.focusRestored, false);
+    assert.ok(result.warnings.includes("focus_restore_failed"));
+  }
 });
 
 test("zen_get_tab_content rejects ambiguous URL targets", async () => {
@@ -444,17 +541,28 @@ test("zen_open_or_focus_url opens a new tab when no matching URL is open", async
 
 function createDependencies(options: {
   contexts?: Partial<Record<"markdown" | "text" | "json", RaycastZenContext>>;
+  contextForActiveTab?: (tab: MozeidonTab, format: "markdown" | "text" | "json") => RaycastZenContext;
   getContextError?: Error;
   zenSelection?: RaycastZenContext;
   getZenSelectionError?: Error & { code?: string };
   raycastSelectedText?: string;
   tabs?: MozeidonTab[];
   switchTab?: (windowId: number, tabId: number) => void;
+  switchTabError?: Error;
+  applySwitchEffect?: boolean;
   openUrl?: (url: string) => void;
+  wait?: (ms: number) => Promise<void>;
 }): ZenAiToolDependencies {
+  const tabs = (options.tabs ?? []).map((candidate) => ({ ...candidate }));
+  let focusedWindowId = tabs.find((candidate) => candidate.active)?.windowId ?? tabs[0]?.windowId ?? 10;
+
   return {
     getContext: async (format) => {
       if (options.getContextError) throw options.getContextError;
+      if (options.contextForActiveTab) {
+        const active = tabs.find((candidate) => candidate.active && candidate.windowId === focusedWindowId);
+        if (active) return options.contextForActiveTab(active, format);
+      }
       return options.contexts?.[format] ?? context({ markdown: "Default markdown" });
     },
     getZenSelection: async () => {
@@ -463,16 +571,24 @@ function createDependencies(options: {
     },
     getRaycastSelectedText: async () => options.raycastSelectedText,
     listTabs: async () => ({
-      data: options.tabs ?? [],
+      data: tabs,
       windows: [
         {
-          id: 10,
+          id: focusedWindowId,
           isLastFocused: true,
         },
       ],
     }),
-    switchTab: options.switchTab ?? (() => undefined),
+    switchTab: (windowId, tabId) => {
+      if (options.switchTabError) throw options.switchTabError;
+      options.switchTab?.(windowId, tabId);
+      if (options.applySwitchEffect ?? true) {
+        for (const candidate of tabs) candidate.active = candidate.windowId === windowId && candidate.id === tabId;
+        focusedWindowId = windowId;
+      }
+    },
     openUrl: options.openUrl ?? (() => undefined),
+    wait: options.wait ?? (async () => undefined),
   };
 }
 
@@ -499,6 +615,8 @@ function nativeAppIpcError(context: string): MozeidonClientError {
 function context(options: {
   title?: string;
   url?: string;
+  tabId?: number;
+  windowId?: number;
   markdown?: string;
   text?: string;
   selectionText?: string;
@@ -508,12 +626,18 @@ function context(options: {
   return {
     title: options.title,
     url: options.url,
+    tabId: options.tabId,
+    windowId: options.windowId,
     markdown: options.markdown,
     selectionText: options.selectionText,
     isDomSelection: options.isDomSelection,
     isMetadataOnly: options.isMetadataOnly,
     warnings: [],
     raw: {
+      tab: {
+        id: options.tabId,
+        windowId: options.windowId,
+      },
       page: {
         title: options.title,
         url: options.url,

@@ -6,8 +6,9 @@ Define a robust strategy for extracting Zen Context from a specific tab rather t
 
 ## Status
 
-- Proposed
+- Phase 1 implemented
 - 2026-04-30: Drafted as a spec-only stabilization step after Spec 013. No code has been implemented for this spec.
+- 2026-09-10: Phase 1 implemented in Raycast. `zen_get_tab_content` now switches to a non-active target, polls to verify the switch landed, extracts context, verifies the extracted content reports the same `tabId`/`windowId`, and restores original focus by default (`restoreFocus`, default `true`). Failure paths (`tab_activation_failed`, `activation_timeout`, `target_tab_mismatch`) fail closed instead of returning ambiguous content; restore failures (`focus_restore_failed`, `focus_restore_mismatch`) are reported as warnings without discarding valid content. CLI/add-on/native messenger are unchanged, per Phase 1 scope. Phase 2 (direct tab-targeted CLI extraction, e.g. `mozeidon context tab`) is not started.
 
 ## Milestone
 

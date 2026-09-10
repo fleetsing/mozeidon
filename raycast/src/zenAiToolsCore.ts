@@ -35,7 +35,38 @@ export type ZenToolResponse<T> =
         message: string;
       };
       warnings: string[];
+      details?: Record<string, unknown>;
     };
+
+/**
+ * Identity of a specific browser tab, as requested, observed active, or
+ * recorded before a focus-then-read attempt. See spec 014.
+ */
+export type TargetTabIdentity = {
+  tabId?: number;
+  windowId?: number;
+  url?: string;
+  title?: string;
+};
+
+export type TargetTabActivation = {
+  strategy: "focus-then-read";
+  attempted: boolean;
+  succeeded: boolean;
+  attempts: number;
+  elapsedMs: number;
+  errorCode?: string;
+};
+
+export type TargetTabReadMetadata = {
+  requestedTab?: TargetTabIdentity;
+  actualTab?: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  focusChanged: boolean;
+  restoreFocus: boolean;
+  focusRestored?: boolean;
+  activation?: TargetTabActivation;
+};
 
 export type ZenSource = {
   title?: string;
@@ -71,6 +102,7 @@ export type ZenGetTabContentInput = {
   url?: string;
   format?: "markdown" | "text";
   requireContent?: boolean;
+  restoreFocus?: boolean;
 };
 
 export type ZenOpenOrFocusUrlInput = {
@@ -108,6 +140,13 @@ export type ZenGetTabContentData = {
   format: "markdown" | "text";
   markdown?: string;
   text?: string;
+  requestedTab?: TargetTabIdentity;
+  actualTab?: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  focusChanged: boolean;
+  restoreFocus: boolean;
+  focusRestored?: boolean;
+  activation?: TargetTabActivation;
 };
 
 export type ZenOpenOrFocusUrlData = {
@@ -137,6 +176,8 @@ export type ZenAiToolDependencies = {
   listTabs: (includeWindows: boolean) => Promise<MozeidonTabsWithWindowsPayload>;
   switchTab: (windowId: number, tabId: number) => Promise<void> | void;
   openUrl: (url: string) => Promise<void> | void;
+  /** Overridable for tests. Defaults to a real timer. See spec 014 activation polling. */
+  wait?: (ms: number) => Promise<void>;
 };
 
 export type MozeidonTabsWithWindowsPayload = {
@@ -199,6 +240,7 @@ export const ZEN_AI_TOOL_DEFINITIONS: Array<{
       url: "string",
       format: ["markdown", "text"],
       requireContent: "boolean",
+      restoreFocus: "boolean",
     },
   },
   {
@@ -317,21 +359,42 @@ export async function zenGetTabContent(
   const safeInput: ZenGetTabContentInput = input ?? {};
   const format = getSelectionFormat(safeInput.format);
   const requireContent = safeInput.requireContent ?? true;
+  const restoreFocus = safeInput.restoreFocus ?? true;
   const targetValidationError = validateTabContentTarget(safeInput);
   if (targetValidationError) {
     return fail("zen_get_tab_content", "invalid_input", targetValidationError);
   }
 
-  return withToolErrors("zen_get_tab_content", async () => {
-    if (hasTabTarget(safeInput)) {
-      const tab = await resolveTabTarget(safeInput, dependencies);
-      if (shouldSwitchBeforeReading(tab)) {
-        await dependencies.switchTab(tab.windowId ?? 0, tab.id);
-      }
+  return withToolErrors<ZenGetTabContentData>("zen_get_tab_content", async () => {
+    if (!hasTabTarget(safeInput)) {
+      const context = await dependencies.getContext(format);
+      const data = mapContextOutput(context, format, requireContent);
+      return ok(
+        "zen_get_tab_content",
+        {
+          source: data.source,
+          format,
+          markdown: data.markdown,
+          text: data.text,
+          focusChanged: false,
+          restoreFocus,
+        },
+        context.warnings,
+      );
     }
 
-    const context = await dependencies.getContext(format);
-    const data = mapContextOutput(context, format, requireContent);
+    const payload = await dependencies.listTabs(true);
+    const tabs = mapToolTabs(payload);
+    const originalTab = findActiveIdentity(tabs);
+    const tab = matchTabTarget(tabs, safeInput);
+    const requestedTab: TargetTabIdentity = { tabId: tab.id, windowId: tab.windowId, url: tab.url, title: tab.title };
+
+    const stabilized = await stabilizeTargetedRead(
+      { requestedTab, originalTab, alreadyActive: !shouldSwitchBeforeReading(tab), format, restoreFocus },
+      dependencies,
+    );
+
+    const data = mapContextOutput(stabilized.context, format, requireContent);
     return ok(
       "zen_get_tab_content",
       {
@@ -339,10 +402,249 @@ export async function zenGetTabContent(
         format,
         markdown: data.markdown,
         text: data.text,
+        requestedTab: stabilized.metadata.requestedTab,
+        actualTab: stabilized.metadata.actualTab,
+        originalTab: stabilized.metadata.originalTab,
+        focusChanged: stabilized.metadata.focusChanged,
+        restoreFocus: stabilized.metadata.restoreFocus,
+        focusRestored: stabilized.metadata.focusRestored,
+        activation: stabilized.metadata.activation,
       },
-      context.warnings,
+      [...stabilized.context.warnings, ...stabilized.warnings],
     );
   });
+}
+
+const ACTIVATION_MAX_ATTEMPTS = 10;
+const ACTIVATION_DELAY_MS = 100;
+const ACTIVATION_TIMEOUT_MS = 1500;
+
+type StabilizeTargetedReadOptions = {
+  requestedTab: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  alreadyActive: boolean;
+  format: "markdown" | "text" | "json";
+  restoreFocus: boolean;
+};
+
+type StabilizeTargetedReadResult = {
+  context: RaycastZenContext;
+  metadata: TargetTabReadMetadata;
+  warnings: string[];
+};
+
+/**
+ * Focus-then-read stabilization (spec 014, Phase 1): switch to the target
+ * tab, verify the switch actually landed on it, extract context, verify the
+ * context reports the same tab, then restore the original focus. Fails
+ * closed at every verification step rather than returning ambiguous content.
+ */
+async function stabilizeTargetedRead(
+  options: StabilizeTargetedReadOptions,
+  dependencies: ZenAiToolDependencies,
+): Promise<StabilizeTargetedReadResult> {
+  const { requestedTab, originalTab, restoreFocus } = options;
+
+  if (options.alreadyActive) {
+    const context = await dependencies.getContext(options.format);
+    const actualTab = identityFromContext(context);
+    const activation: TargetTabActivation = {
+      strategy: "focus-then-read",
+      attempted: false,
+      succeeded: true,
+      attempts: 0,
+      elapsedMs: 0,
+    };
+
+    if (!sameTab(requestedTab, actualTab)) {
+      throw new ZenToolError("target_tab_mismatch", "Zen Context read a different tab than requested.", {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: false,
+        restoreFocus,
+        activation,
+      });
+    }
+
+    return {
+      context,
+      metadata: { requestedTab, actualTab, originalTab, focusChanged: false, restoreFocus, activation },
+      warnings: [],
+    };
+  }
+
+  const start = Date.now();
+  try {
+    await dependencies.switchTab(requestedTab.windowId as number, requestedTab.tabId as number);
+  } catch (error) {
+    const activation: TargetTabActivation = {
+      strategy: "focus-then-read",
+      attempted: true,
+      succeeded: false,
+      attempts: 0,
+      elapsedMs: Date.now() - start,
+      errorCode: "tab_activation_failed",
+    };
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "tab_activation_failed",
+      messageFromError(error),
+      { requestedTab, originalTab, focusChanged: false, restoreFocus, focusRestored: restore?.succeeded, activation },
+      restore?.warnings,
+    );
+  }
+
+  const activationOutcome = await pollForActiveTab(requestedTab, dependencies, {
+    maxAttempts: ACTIVATION_MAX_ATTEMPTS,
+    delayMs: ACTIVATION_DELAY_MS,
+    timeoutMs: ACTIVATION_TIMEOUT_MS,
+    start,
+  });
+
+  const activation: TargetTabActivation = {
+    strategy: "focus-then-read",
+    attempted: true,
+    succeeded: activationOutcome.succeeded,
+    attempts: activationOutcome.attempts,
+    elapsedMs: Date.now() - start,
+  };
+
+  if (!activationOutcome.succeeded) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "activation_timeout",
+      "The requested Zen tab did not become active in time.",
+      {
+        requestedTab,
+        actualTab: activationOutcome.actualTab,
+        originalTab,
+        focusChanged: true,
+        restoreFocus,
+        focusRestored: restore?.succeeded,
+        activation,
+      },
+      restore?.warnings,
+    );
+  }
+
+  let context: RaycastZenContext;
+  try {
+    context = await dependencies.getContext(options.format);
+  } catch (error) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "context_extraction_failed",
+      messageFromError(error),
+      { requestedTab, originalTab, focusChanged: true, restoreFocus, focusRestored: restore?.succeeded, activation },
+      restore?.warnings,
+    );
+  }
+
+  const actualTab = identityFromContext(context);
+  if (!sameTab(requestedTab, actualTab)) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "target_tab_mismatch",
+      "Zen Context read a different tab than requested.",
+      {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: true,
+        restoreFocus,
+        focusRestored: restore?.succeeded,
+        activation,
+      },
+      restore?.warnings,
+    );
+  }
+
+  const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+  return {
+    context,
+    metadata: {
+      requestedTab,
+      actualTab,
+      originalTab,
+      focusChanged: true,
+      restoreFocus,
+      focusRestored: restore?.succeeded,
+      activation,
+    },
+    warnings: restore?.warnings ?? [],
+  };
+}
+
+async function pollForActiveTab(
+  requestedTab: TargetTabIdentity,
+  dependencies: ZenAiToolDependencies,
+  options: { maxAttempts: number; delayMs: number; timeoutMs: number; start: number },
+): Promise<{ succeeded: boolean; attempts: number; actualTab?: TargetTabIdentity }> {
+  let attempts = 0;
+  let actualTab: TargetTabIdentity | undefined;
+
+  while (attempts < options.maxAttempts) {
+    attempts++;
+    const payload = await dependencies.listTabs(true);
+    actualTab = findActiveIdentity(mapToolTabs(payload), requestedTab.windowId);
+    if (actualTab && actualTab.tabId === requestedTab.tabId && actualTab.windowId === requestedTab.windowId) {
+      return { succeeded: true, attempts, actualTab };
+    }
+    if (Date.now() - options.start >= options.timeoutMs || attempts >= options.maxAttempts) break;
+    await (dependencies.wait ?? defaultWait)(options.delayMs);
+  }
+
+  return { succeeded: false, attempts, actualTab };
+}
+
+async function tryRestoreFocus(
+  originalTab: TargetTabIdentity | undefined,
+  dependencies: ZenAiToolDependencies,
+): Promise<{ succeeded: boolean; warnings: string[] }> {
+  if (originalTab?.tabId === undefined || originalTab?.windowId === undefined) {
+    return { succeeded: false, warnings: ["focus_restore_failed"] };
+  }
+
+  try {
+    await dependencies.switchTab(originalTab.windowId, originalTab.tabId);
+  } catch (_) {
+    return { succeeded: false, warnings: ["focus_restore_failed"] };
+  }
+
+  const outcome = await pollForActiveTab(originalTab, dependencies, {
+    maxAttempts: ACTIVATION_MAX_ATTEMPTS,
+    delayMs: ACTIVATION_DELAY_MS,
+    timeoutMs: ACTIVATION_TIMEOUT_MS,
+    start: Date.now(),
+  });
+
+  if (!outcome.succeeded) return { succeeded: false, warnings: ["focus_restore_mismatch"] };
+  return { succeeded: true, warnings: [] };
+}
+
+function defaultWait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function identityFromContext(context: RaycastZenContext): TargetTabIdentity | undefined {
+  if (context.tabId === undefined || context.windowId === undefined) return undefined;
+  return { tabId: context.tabId, windowId: context.windowId, url: context.url, title: context.title };
+}
+
+function sameTab(requested: TargetTabIdentity, actual: TargetTabIdentity | undefined): boolean {
+  return actual !== undefined && requested.tabId === actual.tabId && requested.windowId === actual.windowId;
+}
+
+function findActiveIdentity(tabs: ZenToolTab[], windowId?: number): TargetTabIdentity | undefined {
+  const candidates = tabs.filter((tab) => tab.active && (windowId === undefined || tab.windowId === windowId));
+  const preferred = candidates.find((tab) => tab.windowFocused) ?? candidates[0];
+  if (!preferred) return undefined;
+  return { tabId: preferred.id, windowId: preferred.windowId, url: preferred.url, title: preferred.title };
+}
+
+function messageFromError(error: unknown): string {
+  return error instanceof Error ? error.message : "Zen tab activation failed.";
 }
 
 export async function zenOpenOrFocusUrl(
@@ -488,12 +790,7 @@ async function resolveRaycastSelectionSource(
   }
 }
 
-async function resolveTabTarget(
-  input: ZenGetTabContentInput,
-  dependencies: ZenAiToolDependencies,
-): Promise<ZenToolTab> {
-  const payload = await dependencies.listTabs(true);
-  const tabs = mapToolTabs(payload);
+function matchTabTarget(tabs: ZenToolTab[], input: ZenGetTabContentInput): ZenToolTab {
   const matches =
     input.tabId !== undefined && input.windowId !== undefined
       ? tabs.filter((tab) => tab.id === input.tabId && tab.windowId === input.windowId)
@@ -608,12 +905,19 @@ function ok<T>(tool: ZenAiToolName, data: T, warnings: string[] = []): ZenToolRe
   };
 }
 
-function fail<T>(tool: ZenAiToolName, code: string, message: string, warnings: string[] = []): ZenToolResponse<T> {
+function fail<T>(
+  tool: ZenAiToolName,
+  code: string,
+  message: string,
+  warnings: string[] = [],
+  details?: Record<string, unknown>,
+): ZenToolResponse<T> {
   return {
     ok: false,
     tool,
     error: { code, message },
     warnings,
+    ...(details ? { details } : {}),
   };
 }
 
@@ -625,7 +929,7 @@ async function withToolErrors<T>(
     return await action();
   } catch (error) {
     if (error instanceof ZenToolError) {
-      return fail(tool, error.code, error.message);
+      return fail(tool, error.code, error.message, error.extraWarnings ?? [], error.details);
     }
 
     const mozeidonContextError = mapMozeidonContextError(error);
@@ -641,6 +945,8 @@ class ZenToolError extends Error {
   constructor(
     public readonly code: string,
     message: string,
+    public readonly details?: Record<string, unknown>,
+    public readonly extraWarnings?: string[],
   ) {
     super(message);
     this.name = "ZenToolError";

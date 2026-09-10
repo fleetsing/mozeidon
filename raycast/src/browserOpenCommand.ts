@@ -70,7 +70,9 @@ export function tokenizeCommand(command: string): string[] {
 export function buildBrowserOpenArgs(command: string, extraArgs: string[] = []): string[] {
   const tokens = tokenizeCommand(command);
   if (tokens.length === 0) {
-    throw new Error("The browser command preference is empty. Set it to a command such as: open -b app.zen-browser.zen");
+    throw new Error(
+      "The browser command preference is empty. Set it to a command such as: open -b app.zen-browser.zen",
+    );
   }
   return [...tokens, ...extraArgs];
 }
