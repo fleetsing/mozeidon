@@ -33,6 +33,10 @@ test("tokenizeCommand throws on unterminated quotes", () => {
   assert.throws(() => tokenizeCommand('open -a "My Browser.app'), /Unterminated quote/);
 });
 
+test("tokenizeCommand throws on a trailing backslash instead of dropping it", () => {
+  assert.throws(() => tokenizeCommand("open /Applications/My Browser.app\\"), /Trailing backslash/);
+});
+
 test("tokenizeCommand returns nothing for empty input", () => {
   assert.deepEqual(tokenizeCommand("   "), []);
 });

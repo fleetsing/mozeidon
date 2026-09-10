@@ -390,7 +390,14 @@ export async function zenGetTabContent(
     const requestedTab: TargetTabIdentity = { tabId: tab.id, windowId: tab.windowId, url: tab.url, title: tab.title };
 
     const stabilized = await stabilizeTargetedRead(
-      { requestedTab, originalTab, alreadyActive: !shouldSwitchBeforeReading(tab), format, restoreFocus },
+      {
+        requestedTab,
+        originalTab,
+        alreadyActive: !shouldSwitchBeforeReading(tab),
+        format,
+        restoreFocus,
+        requireContent,
+      },
       dependencies,
     );
 
@@ -425,6 +432,7 @@ type StabilizeTargetedReadOptions = {
   alreadyActive: boolean;
   format: "markdown" | "text" | "json";
   restoreFocus: boolean;
+  requireContent: boolean;
 };
 
 type StabilizeTargetedReadResult = {
@@ -467,6 +475,19 @@ async function stabilizeTargetedRead(
       });
     }
 
+    try {
+      ensureRequiredContent(context, options.format, options.requireContent);
+    } catch (error) {
+      throw attachStabilizationDetails(error, {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: false,
+        restoreFocus,
+        activation,
+      });
+    }
+
     return {
       context,
       metadata: { requestedTab, actualTab, originalTab, focusChanged: false, restoreFocus, activation },
@@ -490,7 +511,7 @@ async function stabilizeTargetedRead(
     throw new ZenToolError(
       "tab_activation_failed",
       messageFromError(error),
-      { requestedTab, originalTab, focusChanged: false, restoreFocus, focusRestored: restore?.succeeded, activation },
+      { requestedTab, originalTab, focusChanged: true, restoreFocus, focusRestored: restore?.succeeded, activation },
       restore?.warnings,
     );
   }
@@ -560,6 +581,25 @@ async function stabilizeTargetedRead(
     );
   }
 
+  try {
+    ensureRequiredContent(context, options.format, options.requireContent);
+  } catch (error) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw attachStabilizationDetails(
+      error,
+      {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: true,
+        restoreFocus,
+        focusRestored: restore?.succeeded,
+        activation,
+      },
+      restore?.warnings,
+    );
+  }
+
   const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
   return {
     context,
@@ -574,6 +614,25 @@ async function stabilizeTargetedRead(
     },
     warnings: restore?.warnings ?? [],
   };
+}
+
+function ensureRequiredContent(
+  context: RaycastZenContext,
+  format: "markdown" | "text" | "json",
+  requireContent: boolean,
+): void {
+  if (requireContent) requireRealContentContext(context, format);
+}
+
+function attachStabilizationDetails(
+  error: unknown,
+  details: Record<string, unknown>,
+  warnings?: string[],
+): ZenToolError {
+  if (error instanceof ZenToolError) {
+    return new ZenToolError(error.code, error.message, details, warnings ?? error.extraWarnings);
+  }
+  return new ZenToolError("content_unavailable", messageFromError(error), details, warnings);
 }
 
 async function pollForActiveTab(

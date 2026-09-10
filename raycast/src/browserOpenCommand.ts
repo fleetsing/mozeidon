@@ -56,6 +56,9 @@ export function tokenizeCommand(command: string): string[] {
   if (quote) {
     throw new Error(`Unterminated quote in browser command: ${command}`);
   }
+  if (escaped) {
+    throw new Error(`Trailing backslash in browser command: ${command}`);
+  }
   if (hasToken) {
     tokens.push(current);
   }

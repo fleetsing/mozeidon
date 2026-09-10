@@ -416,7 +416,10 @@ test("zen_get_tab_content fails closed when the switch command throws", async ()
   );
 
   assert.equal(result.ok, false);
-  if (!result.ok) assert.equal(result.error.code, "tab_activation_failed");
+  if (!result.ok) {
+    assert.equal(result.error.code, "tab_activation_failed");
+    assert.equal(result.details?.focusChanged, true);
+  }
 });
 
 test("zen_get_tab_content fails closed when extracted context reports a different tab", async () => {
@@ -452,6 +455,28 @@ test("zen_get_tab_content reports a warning but keeps content when restore focus
   if (result.ok) {
     assert.equal(result.data.focusRestored, false);
     assert.ok(result.warnings.includes("focus_restore_failed"));
+  }
+});
+
+test("zen_get_tab_content preserves restore-failure warnings and activation metadata when content is unavailable", async () => {
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      contextForActiveTab: (tab) => context({ title: tab.title, url: tab.url, tabId: tab.id, windowId: tab.windowId }),
+      switchTab: (windowId, tabId) => {
+        if (windowId === 10 && tabId === 1) throw new Error("restore failed");
+      },
+    }),
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "content_unavailable");
+    assert.ok(result.warnings.includes("focus_restore_failed"));
+    assert.equal(result.details?.focusRestored, false);
+    assert.deepEqual(result.details?.requestedTab, { tabId: 2, windowId: 20, url: "https://github.com/example/pull/1", title: "GitHub PR" });
+    assert.ok(result.details?.activation);
   }
 });
 

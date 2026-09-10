@@ -2,7 +2,7 @@
 
 ## Summary
 
-Replace the last shell-string `execSync` calls in the Raycast extension with argument-array `execFileSync` execution. The browser-open preference (`FIREFOX_OPEN_COMMAND`) is currently executed as an interpolated shell string; this spec tokens it into an argv array so no user-controlled preference value is ever interpreted by a shell.
+Replace the last shell-string `execSync` calls in the Raycast extension with argument-array `execFileSync` execution. The browser-open preference (`FIREFOX_OPEN_COMMAND`) is currently executed as an interpolated shell string; this spec tokenizes it into an argv array so no user-controlled preference value is ever interpreted by a shell.
 
 ## Status
 
