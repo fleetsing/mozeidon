@@ -1,6 +1,9 @@
 import browser from "webextension-polyfill"
 
-import type { ContextWindow } from "./types"
+import type { ContextTarget, ContextWindow } from "./types"
+import { resolveTargetTab, type TargetTabResult } from "./target"
+
+export type { TargetTabResult } from "./target"
 
 export async function getActiveTab() {
   const tabs = await browser.tabs.query({
@@ -8,6 +11,17 @@ export async function getActiveTab() {
     lastFocusedWindow: true,
   })
   return tabs[0]
+}
+
+export async function getTargetTab(target: ContextTarget): Promise<TargetTabResult> {
+  let tab: browser.Tabs.Tab | undefined
+  try {
+    tab = await browser.tabs.get(target.tabId)
+  } catch (_) {
+    tab = undefined
+  }
+
+  return resolveTargetTab(tab, target)
 }
 
 export async function getContextWindow(

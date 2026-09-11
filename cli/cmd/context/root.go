@@ -13,9 +13,12 @@ import (
 )
 
 type contextCommandFlags struct {
-	format   string
-	selector string
-	maxBytes int
+	format    string
+	selector  string
+	maxBytes  int
+	hasTarget bool
+	tabID     int64
+	windowID  int64
 }
 
 var ContextCmd = &cobra.Command{
@@ -29,6 +32,7 @@ func init() {
 	ContextCmd.AddCommand(newSelectionCmd())
 	ContextCmd.AddCommand(newMetadataCmd())
 	ContextCmd.AddCommand(newLinksCmd())
+	ContextCmd.AddCommand(newTabCmd())
 }
 
 func newActiveCmd() *cobra.Command {
@@ -88,6 +92,26 @@ func newLinksCmd() *cobra.Command {
 	return cmd
 }
 
+func newTabCmd() *cobra.Command {
+	commandFlags := contextCommandFlags{hasTarget: true}
+	cmd := &cobra.Command{
+		Use:   "tab",
+		Short: "Get context for a specific Zen tab",
+		Long:  "Get structured JSON context for a specific Zen tab by tab id and window id, without switching to it.",
+		Args:  cobra.NoArgs,
+		Run: func(_ *cobra.Command, _ []string) {
+			runContext(core.ContextModeActive, commandFlags)
+		},
+	}
+	addCommonFlags(cmd, &commandFlags)
+	cmd.Flags().StringVar(&commandFlags.selector, "selector", "", "CSS selector to scope page extraction")
+	cmd.Flags().Int64VarP(&commandFlags.tabID, "tab-id", "t", 0, "the target tab id")
+	cmd.Flags().Int64VarP(&commandFlags.windowID, "window-id", "w", 0, "the target tab's window id")
+	_ = cmd.MarkFlagRequired("tab-id")
+	_ = cmd.MarkFlagRequired("window-id")
+	return cmd
+}
+
 func addCommonFlags(cmd *cobra.Command, commandFlags *contextCommandFlags) {
 	cmd.Flags().StringVar(&commandFlags.format, "format", "json", "structured content format to populate: json, markdown, text, or html")
 	cmd.Flags().IntVar(&commandFlags.maxBytes, "max-bytes", core.DefaultMaxBytes, "maximum target bytes for structured context output")
@@ -134,11 +158,17 @@ func runContext(mode core.ContextMode, commandFlags contextCommandFlags) {
 		os.Exit(2)
 	}
 
+	var target *core.ContextTabTarget
+	if commandFlags.hasTarget {
+		target = &core.ContextTabTarget{TabID: commandFlags.tabID, WindowID: commandFlags.windowID}
+	}
+
 	exitCode := app.ContextJSON(core.ContextOptions{
 		Mode:     mode,
 		Format:   format,
 		Selector: commandFlags.selector,
 		MaxBytes: commandFlags.maxBytes,
+		Target:   target,
 	})
 	if exitCode != 0 {
 		os.Exit(exitCode)

@@ -12,11 +12,17 @@ export type ContextLimits = {
   maxJsonLdBytes: number
 }
 
+export type ContextTarget = {
+  tabId: number
+  windowId: number
+}
+
 export type ContextRequest = {
   mode: ContextMode
   format: ContextFormat
   selector?: string
   limits: ContextLimits
+  target?: ContextTarget
 }
 
 export type ContextRequestParseResult =

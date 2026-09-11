@@ -120,6 +120,48 @@ func TestFindActiveContextTabFallsBackToAnyActiveTab(t *testing.T) {
 	}
 }
 
+func TestFindContextTabByIDMatchesExactTabAndWindow(t *testing.T) {
+	tabs := []models.Tab{
+		{Id: 1, WindowId: 100, Active: true},
+		{Id: 2, WindowId: 200, Active: false},
+	}
+	windows := []models.Window{
+		{Id: 100, IsLastFocused: false},
+		{Id: 200, IsLastFocused: true},
+	}
+
+	tab, window, ok := FindContextTabByID(tabs, windows, 2, 200)
+
+	if !ok {
+		t.Fatal("expected to find the requested tab")
+	}
+	if tab.Id != 2 || window.Id != 200 {
+		t.Fatalf("expected requested tab/window, got tab=%d window=%d", tab.Id, window.Id)
+	}
+}
+
+func TestFindContextTabByIDRejectsWindowMismatch(t *testing.T) {
+	tabs := []models.Tab{{Id: 1, WindowId: 100, Active: true}}
+	windows := []models.Window{{Id: 100, IsLastFocused: true}}
+
+	_, _, ok := FindContextTabByID(tabs, windows, 1, 999)
+
+	if ok {
+		t.Fatal("expected no match when the tab exists but in a different window")
+	}
+}
+
+func TestFindContextTabByIDRejectsUnknownTab(t *testing.T) {
+	tabs := []models.Tab{{Id: 1, WindowId: 100, Active: true}}
+	windows := []models.Window{{Id: 100, IsLastFocused: true}}
+
+	_, _, ok := FindContextTabByID(tabs, windows, 999, 100)
+
+	if ok {
+		t.Fatal("expected no match for an unknown tab id")
+	}
+}
+
 func TestBuildContextPayloadUsesRestrictedPageForSelectorOnRestrictedFallback(t *testing.T) {
 	app := &App{
 		browser: &browsercore.BrowserService{CommandSender: fakeCommandSender{
@@ -155,6 +197,136 @@ func TestBuildContextPayloadUsesRestrictedPageForSelectorOnRestrictedFallback(t 
 	}
 	if contextError.Details["legacyCode"] != "unsupported_page" {
 		t.Fatalf("expected unsupported_page legacy code, got %#v", contextError.Details)
+	}
+}
+
+func TestBuildContextPayloadReturnsTargetedTabViaExtractionPayload(t *testing.T) {
+	extractionPayload := ContextExtractionPayload{
+		OK:     true,
+		Status: ContextStatusOK,
+		Tab:    models.Tab{Id: 2, WindowId: 20, Url: "https://example.com/background", Title: "Background Tab", Active: false},
+		Window: models.Window{Id: 20, IsLastFocused: false},
+	}
+	app := &App{
+		browser: &browsercore.BrowserService{CommandSender: fakeCommandSender{
+			"get-context": {commandResult(t, map[string]interface{}{"data": extractionPayload})},
+		}},
+	}
+
+	exitCode, payload := app.BuildContextPayload(
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatMarkdown, Target: &ContextTabTarget{TabID: 2, WindowID: 20}},
+		time.Date(2026, 9, 11, 9, 45, 0, 0, time.UTC),
+	)
+
+	context, ok := payload.(ZenContext)
+	if !ok {
+		t.Fatalf("expected zen context payload, got %#v", payload)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected success exit code, got %d", exitCode)
+	}
+	if context.Tab.ID != 2 || context.Window.ID != 20 {
+		t.Fatalf("expected the requested tab's identity, got %#v", context)
+	}
+	if context.Extraction.Target == nil || context.Extraction.Target.TabID != 2 || context.Extraction.Target.WindowID != 20 {
+		t.Fatalf("expected extraction.target to echo the requested target, got %#v", context.Extraction.Target)
+	}
+	if context.Source.Command != "context tab" {
+		t.Fatalf("expected source command to reflect context tab, got %q", context.Source.Command)
+	}
+}
+
+func TestBuildContextPayloadReturnsTabNotFoundFromExtractionPayload(t *testing.T) {
+	extractionPayload := ContextExtractionPayload{
+		OK:      false,
+		Code:    "tab_not_found",
+		Message: "The requested Zen tab was not found.",
+	}
+	app := &App{
+		browser: &browsercore.BrowserService{CommandSender: fakeCommandSender{
+			"get-context": {commandResult(t, map[string]interface{}{"data": extractionPayload})},
+		}},
+	}
+
+	exitCode, payload := app.BuildContextPayload(
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatMarkdown, Target: &ContextTabTarget{TabID: 99, WindowID: 20}},
+		time.Date(2026, 9, 11, 9, 45, 0, 0, time.UTC),
+	)
+
+	contextError, ok := payload.(ZenContextError)
+	if !ok {
+		t.Fatalf("expected context error payload, got %#v", payload)
+	}
+	if exitCode != 4 {
+		t.Fatalf("expected tab_not_found exit code 4, got %d", exitCode)
+	}
+	if contextError.Code != "tab_not_found" {
+		t.Fatalf("expected tab_not_found error, got %#v", contextError)
+	}
+}
+
+func TestBuildContextPayloadFallsBackToTargetedTabLookup(t *testing.T) {
+	app := &App{
+		browser: &browsercore.BrowserService{CommandSender: fakeCommandSender{
+			"get-context": []models.CommandResult{},
+			"get-tabs": {commandResult(t, models.Tabs{Items: []models.Tab{
+				{Id: 1, WindowId: 10, Url: "https://example.com/active", Title: "Active Tab", Active: true},
+				{Id: 2, WindowId: 20, Url: "https://example.com/background", Title: "Background Tab", Active: false},
+			}})},
+			"get-windows": {commandResult(t, models.Windows{Items: []models.Window{
+				{Id: 10, IsLastFocused: true},
+				{Id: 20, IsLastFocused: false},
+			}})},
+		}},
+	}
+
+	exitCode, payload := app.BuildContextPayload(
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatMarkdown, Target: &ContextTabTarget{TabID: 2, WindowID: 20}},
+		time.Date(2026, 9, 11, 9, 45, 0, 0, time.UTC),
+	)
+
+	context, ok := payload.(ZenContext)
+	if !ok {
+		t.Fatalf("expected zen context payload, got %#v", payload)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected success exit code, got %d", exitCode)
+	}
+	if context.Tab.ID != 2 || context.Window.ID != 20 {
+		t.Fatalf("expected the fallback lookup to resolve the requested tab, got %#v", context)
+	}
+}
+
+func TestBuildContextPayloadFallbackReportsTabNotFoundWhenTargetMissing(t *testing.T) {
+	app := &App{
+		browser: &browsercore.BrowserService{CommandSender: fakeCommandSender{
+			"get-context": []models.CommandResult{},
+			"get-tabs": {commandResult(t, models.Tabs{Items: []models.Tab{
+				{Id: 1, WindowId: 10, Active: true},
+			}})},
+			"get-windows": {commandResult(t, models.Windows{Items: []models.Window{
+				{Id: 10, IsLastFocused: true},
+			}})},
+		}},
+	}
+
+	exitCode, payload := app.BuildContextPayload(
+		ContextOptions{Mode: ContextModeActive, Format: ContextFormatMarkdown, Target: &ContextTabTarget{TabID: 99, WindowID: 20}},
+		time.Date(2026, 9, 11, 9, 45, 0, 0, time.UTC),
+	)
+
+	contextError, ok := payload.(ZenContextError)
+	if !ok {
+		t.Fatalf("expected context error payload, got %#v", payload)
+	}
+	if exitCode != 4 {
+		t.Fatalf("expected tab_not_found exit code 4, got %d", exitCode)
+	}
+	if contextError.Code != "tab_not_found" {
+		t.Fatalf("expected tab_not_found error, got %#v", contextError)
+	}
+	if contextError.Details["tabId"] != int64(99) {
+		t.Fatalf("expected tabId detail to be preserved, got %#v", contextError.Details)
 	}
 }
 
@@ -328,6 +500,29 @@ func TestNewContextExtractionRequestIncludesLimitsAndSelector(t *testing.T) {
 	}
 	if request.Limits.MaxTextBytes != DefaultTextBytes || request.Limits.MaxMarkdownBytes != DefaultMarkdownMax {
 		t.Fatalf("expected default field limits, got %#v", request.Limits)
+	}
+}
+
+func TestNewContextExtractionRequestIncludesTarget(t *testing.T) {
+	request := NewContextExtractionRequest(ContextOptions{
+		Mode:   ContextModeActive,
+		Format: ContextFormatMarkdown,
+		Target: &ContextTabTarget{TabID: 123, WindowID: 456},
+	})
+
+	if request.Target == nil {
+		t.Fatal("expected target to be included in extraction request")
+	}
+	if request.Target.TabID != 123 || request.Target.WindowID != 456 {
+		t.Fatalf("unexpected request target: %#v", request.Target)
+	}
+}
+
+func TestNewContextExtractionRequestOmitsTargetWhenUntargeted(t *testing.T) {
+	request := NewContextExtractionRequest(ContextOptions{Mode: ContextModeActive, Format: ContextFormatMarkdown})
+
+	if request.Target != nil {
+		t.Fatalf("expected no target for an untargeted request, got %#v", request.Target)
 	}
 }
 

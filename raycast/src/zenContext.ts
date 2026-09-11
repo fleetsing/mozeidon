@@ -101,6 +101,20 @@ export function fetchZenSelection(options: MozeidonJsonOptions): RaycastZenConte
   );
 }
 
+export function fetchTabContext(
+  tabId: number,
+  windowId: number,
+  format: "markdown" | "text" | "json",
+  options: MozeidonJsonOptions,
+): RaycastZenContext {
+  return parseRaycastZenContext(
+    runContextJson(buildTabContextArgs(tabId, windowId, format), {
+      ...options,
+      context: `context tab --tab-id ${tabId} --window-id ${windowId} --format ${format}`,
+    }),
+  );
+}
+
 function runContextJson(args: string[], options: MozeidonJsonOptions): ZenContext {
   try {
     return runMozeidonJson<ZenContext>(args, options);
@@ -108,6 +122,10 @@ function runContextJson(args: string[], options: MozeidonJsonOptions): ZenContex
     if (!options.profileId || !isProfileNotFoundError(error)) throw error;
     return runMozeidonJson<ZenContext>(args, { ...options, profileId: undefined });
   }
+}
+
+export function buildTabContextArgs(tabId: number, windowId: number, format: "markdown" | "text" | "json"): string[] {
+  return ["context", "tab", "--tab-id", String(tabId), "--window-id", String(windowId), "--format", format];
 }
 
 export function buildActiveContextArgs(format: "markdown" | "text" | "json"): string[] {

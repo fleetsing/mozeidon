@@ -15,6 +15,7 @@
     "src/services/context/request.ts",
     "src/services/context/urls.ts",
     "src/services/context/truncation.ts",
-    "src/services/context/injected-extractor.ts"
+    "src/services/context/injected-extractor.ts",
+    "src/services/context/target.ts"
   ]
 }

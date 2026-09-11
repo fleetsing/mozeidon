@@ -4,11 +4,12 @@ import { openNewTab, switchTab } from "./actions";
 import { Tab, type MozeidonTab } from "./interfaces";
 import { runMozeidonJson } from "./mozeidonClient";
 import type { ZenAiToolDependencies, MozeidonTabsWithWindowsPayload } from "./zenAiToolsCore";
-import { fetchActiveContext, fetchZenSelection } from "./zenContext";
+import { fetchActiveContext, fetchTabContext, fetchZenSelection } from "./zenContext";
 
 export function createZenAiToolDependencies(): ZenAiToolDependencies {
   return {
     getContext: async (format) => fetchActiveContext(format, getMozeidonOptions()),
+    getContextForTab: async (tabId, windowId, format) => fetchTabContext(tabId, windowId, format, getMozeidonOptions()),
     getZenSelection: async () => fetchZenSelection(getMozeidonOptions()),
     getRaycastSelectedText: getRaycastSelectedTextIfAvailable,
     listTabs: async (includeWindows) => fetchTabs(includeWindows),

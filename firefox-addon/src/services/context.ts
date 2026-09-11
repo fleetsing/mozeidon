@@ -3,7 +3,7 @@ import { Command } from "../models/command"
 import { Port } from "../models/port"
 import { Response } from "../models/response"
 import { delay } from "../utils"
-import { getActiveTab, getContextWindow } from "./context/browser-target"
+import { getActiveTab, getContextWindow, getTargetTab } from "./context/browser-target"
 import { contextError } from "./context/errors"
 import { executeContextExtraction } from "./context/extraction"
 import { unsupportedFallback } from "./context/fallbacks"
@@ -43,8 +43,28 @@ export async function getContext(port: Port, { args }: Command) {
       return port.postMessage(Response.end())
     }
 
-    const activeTab = await getActiveTab()
-    if (!activeTab || activeTab.id === undefined) {
+    let tab: Awaited<ReturnType<typeof getActiveTab>> | undefined
+    if (request.target) {
+      const targetResult = await getTargetTab(request.target)
+      if ("error" in targetResult) {
+        port.postMessage(
+          Response.data(
+            contextError(
+              targetResult.error.code,
+              targetResult.error.message,
+              targetResult.error.details
+            )
+          )
+        )
+        await delay(5)
+        return port.postMessage(Response.end())
+      }
+      tab = targetResult.tab
+    } else {
+      tab = await getActiveTab()
+    }
+
+    if (!tab || tab.id === undefined) {
       port.postMessage(
         Response.data(
           contextError("no_active_tab", "No active Zen tab is available.")
@@ -54,8 +74,8 @@ export async function getContext(port: Port, { args }: Command) {
       return port.postMessage(Response.end())
     }
 
-    const window = await getContextWindow(activeTab)
-    const unsupported = isUnsupportedContextUrl(activeTab.url)
+    const window = await getContextWindow(tab)
+    const unsupported = isUnsupportedContextUrl(tab.url)
     if (request.format === "html") {
       port.postMessage(
         Response.data(
@@ -76,7 +96,7 @@ export async function getContext(port: Port, { args }: Command) {
             "Selector extraction is not available on privileged or restricted browser pages.",
             {
               selector: request.selector,
-              url: activeTab.url,
+              url: tab.url,
               legacyCode: "unsupported_page",
             }
           )
@@ -91,9 +111,9 @@ export async function getContext(port: Port, { args }: Command) {
         Response.data(
           buildPayload(
             request,
-            activeTab,
+            tab,
             window,
-            unsupportedFallback(request, activeTab)
+            unsupportedFallback(request, tab)
           )
         )
       )
@@ -101,9 +121,9 @@ export async function getContext(port: Port, { args }: Command) {
       return port.postMessage(Response.end())
     }
 
-    const extracted = await executeContextExtraction(activeTab.id, request)
+    const extracted = await executeContextExtraction(tab.id, request)
     port.postMessage(
-      Response.data(buildPayload(request, activeTab, window, extracted))
+      Response.data(buildPayload(request, tab, window, extracted))
     )
     await delay(5)
     return port.postMessage(Response.end())

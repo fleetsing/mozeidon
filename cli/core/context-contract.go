@@ -60,13 +60,25 @@ type ContextOptions struct {
 	Format   ContextFormat
 	Selector string
 	MaxBytes int
+	Target   *ContextTabTarget
+}
+
+type ContextTabTarget struct {
+	TabID    int64
+	WindowID int64
+}
+
+type ContextTargetRequest struct {
+	TabID    int64 `json:"tabId"`
+	WindowID int64 `json:"windowId"`
 }
 
 type ContextExtractionRequest struct {
-	Mode     ContextMode         `json:"mode"`
-	Format   ContextFormat       `json:"format"`
-	Selector string              `json:"selector,omitempty"`
-	Limits   ZenExtractionLimits `json:"limits"`
+	Mode     ContextMode           `json:"mode"`
+	Format   ContextFormat         `json:"format"`
+	Selector string                `json:"selector,omitempty"`
+	Limits   ZenExtractionLimits   `json:"limits"`
+	Target   *ContextTargetRequest `json:"target,omitempty"`
 }
 
 type ContextExtractionPayload struct {
@@ -270,6 +282,12 @@ type ZenExtractionInfo struct {
 	Warnings           []ZenExtractionWarning `json:"warnings"`
 	Limits             ZenExtractionLimits    `json:"limits"`
 	Truncation         ZenTruncationInfo      `json:"truncation"`
+	Target             *ZenTargetInfo         `json:"target,omitempty"`
+}
+
+type ZenTargetInfo struct {
+	TabID    int64 `json:"tabId"`
+	WindowID int64 `json:"windowId"`
 }
 
 type ZenExtractionWarning struct {
@@ -346,9 +364,22 @@ func (a *App) BuildContextPayload(options ContextOptions, capturedAt time.Time) 
 	tabs := <-a.TabsGet(false, false)
 	windows := <-a.WindowsGet()
 
-	activeTab, activeWindow, found := FindActiveContextTab(tabs.Items, windows.Items)
-	if !found {
-		return 4, NewContextError(options, capturedAt, "no_active_tab", "No active Zen tab is available.", nil)
+	var activeTab models.Tab
+	var activeWindow models.Window
+	var found bool
+	if options.Target != nil {
+		activeTab, activeWindow, found = FindContextTabByID(tabs.Items, windows.Items, options.Target.TabID, options.Target.WindowID)
+		if !found {
+			return 4, NewContextError(options, capturedAt, "tab_not_found", "The requested Zen tab was not found.", map[string]interface{}{
+				"tabId":    options.Target.TabID,
+				"windowId": options.Target.WindowID,
+			})
+		}
+	} else {
+		activeTab, activeWindow, found = FindActiveContextTab(tabs.Items, windows.Items)
+		if !found {
+			return 4, NewContextError(options, capturedAt, "no_active_tab", "No active Zen tab is available.", nil)
+		}
 	}
 
 	if options.Selector != "" {
@@ -479,11 +510,16 @@ func NewContextFromTab(tab models.Tab, window models.Window, profile *profiles.P
 
 func NewContextExtractionRequest(options ContextOptions) ContextExtractionRequest {
 	options = normalizeContextOptions(options)
+	var target *ContextTargetRequest
+	if options.Target != nil {
+		target = &ContextTargetRequest{TabID: options.Target.TabID, WindowID: options.Target.WindowID}
+	}
 	return ContextExtractionRequest{
 		Mode:     options.Mode,
 		Format:   options.Format,
 		Selector: options.Selector,
 		Limits:   contextLimits(options),
+		Target:   target,
 	}
 }
 
@@ -521,6 +557,9 @@ func NewContextFromExtractionPayload(payload ContextExtractionPayload, profile *
 	if extraction.Truncation.Fields == nil {
 		extraction.Truncation.Fields = []string{}
 	}
+	if extraction.Target == nil {
+		extraction.Target = contextTargetInfo(options)
+	}
 
 	return ZenContext{
 		Kind:       ContextKind,
@@ -557,7 +596,7 @@ func NewContextError(options ContextOptions, capturedAt time.Time, code string, 
 		Message: message,
 		Source: ZenContextErrorSource{
 			Provider: ContextProvider,
-			Command:  contextCommand(options.Mode),
+			Command:  contextCommand(options),
 			Format:   options.Format,
 			Output:   ContextOutputJSON,
 		},
@@ -578,6 +617,16 @@ func FindActiveContextTab(tabs []models.Tab, windows []models.Window) (models.Ta
 		if tab.Active {
 			window := windowForTab(tab, windows)
 			return tab, window, true
+		}
+	}
+
+	return models.Tab{}, models.Window{}, false
+}
+
+func FindContextTabByID(tabs []models.Tab, windows []models.Window, tabID int64, windowID int64) (models.Tab, models.Window, bool) {
+	for _, tab := range tabs {
+		if tab.Id == tabID && tab.WindowId == windowID {
+			return tab, windowForTab(tab, windows), true
 		}
 	}
 
@@ -628,7 +677,7 @@ func contextExitCode(code string) int {
 		return 2
 	case "permission_denied", "unsupported_page", "restricted_page", "host_permission_missing", "active_tab_grant_missing", "injection_unavailable":
 		return 3
-	case "no_active_window", "no_active_tab":
+	case "no_active_window", "no_active_tab", "tab_not_found":
 		return 4
 	default:
 		return 1
@@ -740,7 +789,15 @@ func contextExtraction(options ContextOptions, warnings []ZenExtractionWarning, 
 			Truncated: len(truncationFields) > 0,
 			Fields:    truncationFields,
 		},
+		Target: contextTargetInfo(options),
 	}
+}
+
+func contextTargetInfo(options ContextOptions) *ZenTargetInfo {
+	if options.Target == nil {
+		return nil
+	}
+	return &ZenTargetInfo{TabID: options.Target.TabID, WindowID: options.Target.WindowID}
 }
 
 func contextLimits(options ContextOptions) ZenExtractionLimits {
@@ -900,7 +957,7 @@ func truncateStringByBytes(value string, maxBytes int) (string, bool) {
 func contextSource(options ContextOptions, profile *profiles.Profile) ZenContextSource {
 	source := ZenContextSource{
 		Provider: ContextProvider,
-		Command:  contextCommand(options.Mode),
+		Command:  contextCommand(options),
 		Format:   options.Format,
 		Output:   ContextOutputJSON,
 	}
@@ -911,8 +968,11 @@ func contextSource(options ContextOptions, profile *profiles.Profile) ZenContext
 	return source
 }
 
-func contextCommand(mode ContextMode) string {
-	switch mode {
+func contextCommand(options ContextOptions) string {
+	if options.Target != nil {
+		return "context tab"
+	}
+	switch options.Mode {
 	case ContextModeSelection:
 		return "context selection"
 	case ContextModeMetadata:

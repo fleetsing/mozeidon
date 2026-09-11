@@ -404,7 +404,7 @@ Behavior:
 
 Description:
 
-Get content for a Zen tab using the context API. Prefer the active tab; when a non-active tab is requested, use the target-tab stabilization strategy defined in Spec 014 to focus it, verify the switch actually landed, and read verified content.
+Get content for a Zen tab using the context API. Prefer the active tab; when a non-active tab is requested, use the target-tab stabilization strategy defined in Spec 014: a direct read by tab id (Phase 2, no visible focus change) when the installed CLI supports it, falling back to focus-verify-restore (Phase 1) only for an older CLI.
 
 Input schema:
 
@@ -429,7 +429,7 @@ Defaults:
 Behavior:
 
 - If no target is provided, call active context directly.
-- If `tabId` and `windowId` identify an open tab, use the Spec 014 stabilization flow: switch, verify activation, extract context, verify the extracted content reports the same tab, then restore the original focus by default.
+- If `tabId` and `windowId` identify an open tab, use the Spec 014 stabilization flow: prefer a direct read by tab id (no focus change); when the CLI doesn't support that yet, switch, verify activation, extract context, verify the extracted content reports the same tab, then restore the original focus by default.
 - If only `url` is provided, first search open tabs for an exact URL match.
 - If the target cannot be identified unambiguously, return `ok: false` with `ambiguous_tab` or `tab_not_found`.
 - If activation cannot be verified or the extracted content reports a different tab, return `ok: false` rather than ambiguous content (Spec 014 codes: `tab_activation_failed`, `activation_timeout`, `target_tab_mismatch`).
