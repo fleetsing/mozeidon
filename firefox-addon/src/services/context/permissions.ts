@@ -4,7 +4,8 @@ export function permissionsForWarnings(warnings: ContextWarning[]) {
   if (
     warnings.some(
       (warning) =>
-        warning.code === "unsupported_page" || warning.code === "restricted_page"
+        warning.code === "unsupported_page" ||
+        warning.code === "restricted_page"
     )
   ) {
     return {
@@ -60,7 +61,8 @@ export function capabilitiesForWarnings(warnings: ContextWarning[]) {
   if (
     warnings.some(
       (warning) =>
-        warning.code === "unsupported_page" || warning.code === "restricted_page"
+        warning.code === "unsupported_page" ||
+        warning.code === "restricted_page"
     )
   ) {
     return {

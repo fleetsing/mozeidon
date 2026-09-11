@@ -1,8 +1,6 @@
 import type { ContextRequest, ContextWarning, Truncation } from "./types"
 
-export function truncationFromWarnings(
-  warnings: ContextWarning[]
-): Truncation {
+export function truncationFromWarnings(warnings: ContextWarning[]): Truncation {
   const fields = warnings
     .filter(
       (warning) =>

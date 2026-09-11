@@ -15,7 +15,8 @@ function injectedExtractor(request: ContextRequest): ExtractedContext {
       code === "metadata_truncated" ||
       code === "field_truncated"
     ) {
-      if (field && !truncationFields.includes(field)) truncationFields.push(field)
+      if (field && !truncationFields.includes(field))
+        truncationFields.push(field)
     }
   }
 
