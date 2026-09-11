@@ -15,9 +15,7 @@ export const DEFAULT_LIMITS: ContextLimits = {
   maxJsonLdBytes: 100000,
 }
 
-export function parseContextRequest(
-  args?: string
-): ContextRequestParseResult {
+export function parseContextRequest(args?: string): ContextRequestParseResult {
   let parsed: unknown
   try {
     parsed = args ? JSON.parse(args) : {}
