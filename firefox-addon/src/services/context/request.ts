@@ -57,7 +57,8 @@ export function parseContextRequest(args?: string): ContextRequestParseResult {
     return {
       error: {
         code: "invalid_context_request",
-        message: "Context request target must include numeric tabId and windowId.",
+        message:
+          "Context request target must include numeric tabId and windowId.",
         details: { target: request.target },
       },
     }
@@ -77,14 +78,21 @@ export function parseContextRequest(args?: string): ContextRequestParseResult {
 
 function parseTarget(target: unknown): ContextTarget | undefined | "invalid" {
   if (target === undefined) return undefined
-  if (!target || typeof target !== "object" || Array.isArray(target)) return "invalid"
+  if (!target || typeof target !== "object" || Array.isArray(target))
+    return "invalid"
 
   const candidate = target as Record<string, unknown>
-  if (!Number.isFinite(candidate.tabId) || !Number.isFinite(candidate.windowId)) {
+  if (
+    !Number.isFinite(candidate.tabId) ||
+    !Number.isFinite(candidate.windowId)
+  ) {
     return "invalid"
   }
 
-  return { tabId: candidate.tabId as number, windowId: candidate.windowId as number }
+  return {
+    tabId: candidate.tabId as number,
+    windowId: candidate.windowId as number,
+  }
 }
 
 export function parseMode(mode: unknown): ContextMode {

@@ -4,7 +4,9 @@ import type { ContextTarget } from "./types"
 
 export type TargetTabResult =
   | { tab: browser.Tabs.Tab }
-  | { error: { code: string; message: string; details: Record<string, unknown> } }
+  | {
+      error: { code: string; message: string; details: Record<string, unknown> }
+    }
 
 export function resolveTargetTab(
   tab: browser.Tabs.Tab | undefined,

@@ -3,7 +3,11 @@ import { Command } from "../models/command"
 import { Port } from "../models/port"
 import { Response } from "../models/response"
 import { delay } from "../utils"
-import { getActiveTab, getContextWindow, getTargetTab } from "./context/browser-target"
+import {
+  getActiveTab,
+  getContextWindow,
+  getTargetTab,
+} from "./context/browser-target"
 import { contextError } from "./context/errors"
 import { executeContextExtraction } from "./context/extraction"
 import { unsupportedFallback } from "./context/fallbacks"
@@ -109,12 +113,7 @@ export async function getContext(port: Port, { args }: Command) {
     if (unsupported) {
       port.postMessage(
         Response.data(
-          buildPayload(
-            request,
-            tab,
-            window,
-            unsupportedFallback(request, tab)
-          )
+          buildPayload(request, tab, window, unsupportedFallback(request, tab))
         )
       )
       await delay(5)

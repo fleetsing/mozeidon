@@ -13,7 +13,9 @@ export async function getActiveTab() {
   return tabs[0]
 }
 
-export async function getTargetTab(target: ContextTarget): Promise<TargetTabResult> {
+export async function getTargetTab(
+  target: ContextTarget
+): Promise<TargetTabResult> {
   let tab: browser.Tabs.Tab | undefined
   try {
     tab = await browser.tabs.get(target.tabId)
