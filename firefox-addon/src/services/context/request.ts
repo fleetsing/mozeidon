@@ -3,6 +3,7 @@ import type {
   ContextLimits,
   ContextMode,
   ContextRequestParseResult,
+  ContextTarget,
 } from "./types"
 
 export const DEFAULT_LIMITS: ContextLimits = {
@@ -50,6 +51,19 @@ export function parseContextRequest(args?: string): ContextRequestParseResult {
     !Array.isArray(request.limits)
       ? request.limits
       : {}
+
+  const target = parseTarget(request.target)
+  if (target === "invalid") {
+    return {
+      error: {
+        code: "invalid_context_request",
+        message:
+          "Context request target must include numeric tabId and windowId.",
+        details: { target: request.target },
+      },
+    }
+  }
+
   return {
     request: {
       mode,
@@ -57,7 +71,27 @@ export function parseContextRequest(args?: string): ContextRequestParseResult {
       selector:
         typeof request.selector === "string" ? request.selector : undefined,
       limits: { ...DEFAULT_LIMITS, ...limits },
+      target,
     },
+  }
+}
+
+function parseTarget(target: unknown): ContextTarget | undefined | "invalid" {
+  if (target === undefined) return undefined
+  if (!target || typeof target !== "object" || Array.isArray(target))
+    return "invalid"
+
+  const candidate = target as Record<string, unknown>
+  if (
+    !Number.isFinite(candidate.tabId) ||
+    !Number.isFinite(candidate.windowId)
+  ) {
+    return "invalid"
+  }
+
+  return {
+    tabId: candidate.tabId as number,
+    windowId: candidate.windowId as number,
   }
 }
 

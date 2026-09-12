@@ -7,7 +7,7 @@ import {
   ZenContextError,
   type RaycastZenContext,
 } from "./zenContext";
-import { mapMozeidonContextError } from "./zenContextErrors";
+import { isContextCommandUnavailableError, mapMozeidonContextError } from "./zenContextErrors";
 
 export const ZEN_AI_TOOL_NAMES = [
   "zen_get_active_context",
@@ -50,7 +50,7 @@ export type TargetTabIdentity = {
 };
 
 export type TargetTabActivation = {
-  strategy: "focus-then-read";
+  strategy: "direct" | "focus-then-read";
   attempted: boolean;
   succeeded: boolean;
   attempts: number;
@@ -171,6 +171,12 @@ export type ZenToolTabMatch = ZenToolTab & {
 
 export type ZenAiToolDependencies = {
   getContext: (format: "markdown" | "text" | "json") => Promise<RaycastZenContext>;
+  /** Direct tab-targeted read (spec 014 Phase 2). Throws when the installed CLI predates it. */
+  getContextForTab: (
+    tabId: number,
+    windowId: number,
+    format: "markdown" | "text" | "json",
+  ) => Promise<RaycastZenContext>;
   getZenSelection: () => Promise<RaycastZenContext>;
   getRaycastSelectedText: () => Promise<string | undefined>;
   listTabs: (includeWindows: boolean) => Promise<MozeidonTabsWithWindowsPayload>;
@@ -442,12 +448,97 @@ type StabilizeTargetedReadResult = {
 };
 
 /**
+ * Reads a non-active target tab. Prefers a direct read (spec 014, Phase 2)
+ * that never touches browser focus; falls back to focus-then-read (Phase 1)
+ * only when the installed CLI predates direct tab targeting.
+ */
+async function stabilizeTargetedRead(
+  options: StabilizeTargetedReadOptions,
+  dependencies: ZenAiToolDependencies,
+): Promise<StabilizeTargetedReadResult> {
+  if (options.alreadyActive) {
+    return stabilizeWithFocusThenRead(options, dependencies);
+  }
+
+  const direct = await tryDirectTargetedRead(options, dependencies);
+  if (direct) return direct;
+
+  return stabilizeWithFocusThenRead(options, dependencies);
+}
+
+/**
+ * Direct tab-targeted read (spec 014, Phase 2): read the target tab by id
+ * without switching to it. Returns undefined only when the installed CLI
+ * doesn't support `context tab` yet, signaling the caller to fall back to
+ * focus-then-read. Any other failure (tab closed, mismatch, content
+ * unavailable) is thrown directly — a different strategy wouldn't fix it.
+ */
+async function tryDirectTargetedRead(
+  options: StabilizeTargetedReadOptions,
+  dependencies: ZenAiToolDependencies,
+): Promise<StabilizeTargetedReadResult | undefined> {
+  const { requestedTab, originalTab, restoreFocus } = options;
+  const start = Date.now();
+
+  let context: RaycastZenContext;
+  try {
+    context = await dependencies.getContextForTab(
+      requestedTab.tabId as number,
+      requestedTab.windowId as number,
+      options.format,
+    );
+  } catch (error) {
+    if (isContextCommandUnavailableError(error)) return undefined;
+    throw error;
+  }
+
+  const activation: TargetTabActivation = {
+    strategy: "direct",
+    attempted: true,
+    succeeded: true,
+    attempts: 1,
+    elapsedMs: Date.now() - start,
+  };
+
+  const actualTab = identityFromContext(context);
+  if (!sameTab(requestedTab, actualTab)) {
+    throw new ZenToolError("target_tab_mismatch", "Zen Context read a different tab than requested.", {
+      requestedTab,
+      actualTab,
+      originalTab,
+      focusChanged: false,
+      restoreFocus,
+      activation,
+    });
+  }
+
+  try {
+    ensureRequiredContent(context, options.format, options.requireContent);
+  } catch (error) {
+    throw attachStabilizationDetails(error, {
+      requestedTab,
+      actualTab,
+      originalTab,
+      focusChanged: false,
+      restoreFocus,
+      activation,
+    });
+  }
+
+  return {
+    context,
+    metadata: { requestedTab, actualTab, originalTab, focusChanged: false, restoreFocus, activation },
+    warnings: [],
+  };
+}
+
+/**
  * Focus-then-read stabilization (spec 014, Phase 1): switch to the target
  * tab, verify the switch actually landed on it, extract context, verify the
  * context reports the same tab, then restore the original focus. Fails
  * closed at every verification step rather than returning ambiguous content.
  */
-async function stabilizeTargetedRead(
+async function stabilizeWithFocusThenRead(
   options: StabilizeTargetedReadOptions,
   dependencies: ZenAiToolDependencies,
 ): Promise<StabilizeTargetedReadResult> {

@@ -46,6 +46,24 @@ func TestContextCommandsExposeRequiredFlags(t *testing.T) {
 	}
 }
 
+func TestTabCommandExposesTargetFlags(t *testing.T) {
+	tabCmd := newTabCmd()
+	if tabCmd.Use != "tab" {
+		t.Fatalf("expected tab command, got %q", tabCmd.Use)
+	}
+	for _, flagName := range []string{"format", "max-bytes", "selector", "tab-id", "window-id"} {
+		if tabCmd.Flags().Lookup(flagName) == nil {
+			t.Fatalf("expected tab command to expose --%s", flagName)
+		}
+	}
+	for _, flagName := range []string{"tab-id", "window-id"} {
+		flag := tabCmd.Flags().Lookup(flagName)
+		if _, required := flag.Annotations[cobra.BashCompOneRequiredFlag]; !required {
+			t.Fatalf("expected --%s to be required", flagName)
+		}
+	}
+}
+
 func TestIsNativeMessagingError(t *testing.T) {
 	for _, message := range []string{
 		"[Error] Cannot read via ipc with host: mozeidon_native_app_123",

@@ -25,6 +25,9 @@ const {
 const {
   buildPayload,
 } = require("../.test-dist/src/services/context/payload.js")
+const {
+  resolveTargetTab,
+} = require("../.test-dist/src/services/context/target.js")
 
 const htmlSanitizerMissing = require("./fixtures/context/html-sanitizer-missing.json")
 const permissionSelection = require("./fixtures/context/permission-selection.json")
@@ -57,6 +60,7 @@ test("parseContextRequest preserves current defaults and limit merging", () => {
       format: "json",
       selector: undefined,
       limits: DEFAULT_LIMITS,
+      target: undefined,
     },
   })
 
@@ -75,6 +79,7 @@ test("parseContextRequest preserves current defaults and limit merging", () => {
         format: "markdown",
         selector: "main",
         limits: { ...DEFAULT_LIMITS, maxTextBytes: 12 },
+        target: undefined,
       },
     }
   )
@@ -105,6 +110,49 @@ test("parseContextRequest preserves invalid request errors and fallback parsing"
         format: "json",
         selector: undefined,
         limits: DEFAULT_LIMITS,
+        target: undefined,
+      },
+    }
+  )
+})
+
+test("parseContextRequest accepts a well-formed target", () => {
+  const parsed = parseContextRequest(
+    JSON.stringify({ target: { tabId: 2, windowId: 20 } })
+  )
+
+  assert.deepEqual(parsed, {
+    request: {
+      mode: "active",
+      format: "json",
+      selector: undefined,
+      limits: DEFAULT_LIMITS,
+      target: { tabId: 2, windowId: 20 },
+    },
+  })
+})
+
+test("parseContextRequest rejects a malformed target instead of silently ignoring it", () => {
+  assert.deepEqual(
+    parseContextRequest(JSON.stringify({ target: { tabId: 2 } })),
+    {
+      error: {
+        code: "invalid_context_request",
+        message:
+          "Context request target must include numeric tabId and windowId.",
+        details: { target: { tabId: 2 } },
+      },
+    }
+  )
+
+  assert.deepEqual(
+    parseContextRequest(JSON.stringify({ target: "tab-2" })),
+    {
+      error: {
+        code: "invalid_context_request",
+        message:
+          "Context request target must include numeric tabId and windowId.",
+        details: { target: "tab-2" },
       },
     }
   )
@@ -280,4 +328,55 @@ test("golden fixture preserves unsupported page Markdown fallback payload", () =
   )
 
   assert.deepEqual(asJsonValue(payload), unsupportedPageMarkdown)
+})
+
+test("resolveTargetTab matches a tab in the requested window", () => {
+  const result = resolveTargetTab(tab({ id: 2, windowId: 20 }), {
+    tabId: 2,
+    windowId: 20,
+  })
+
+  assert.deepEqual(result, { tab: tab({ id: 2, windowId: 20 }) })
+})
+
+test("resolveTargetTab reports tab_not_found when the tab id does not match, even if the window does", () => {
+  const result = resolveTargetTab(tab({ id: 2, windowId: 20 }), {
+    tabId: 99,
+    windowId: 20,
+  })
+
+  assert.deepEqual(result, {
+    error: {
+      code: "tab_not_found",
+      message: "The requested Zen tab was not found.",
+      details: { tabId: 99, windowId: 20 },
+    },
+  })
+})
+
+test("resolveTargetTab reports tab_not_found when the tab exists in a different window", () => {
+  const result = resolveTargetTab(tab({ id: 2, windowId: 20 }), {
+    tabId: 2,
+    windowId: 99,
+  })
+
+  assert.deepEqual(result, {
+    error: {
+      code: "tab_not_found",
+      message: "The requested Zen tab was not found.",
+      details: { tabId: 2, windowId: 99 },
+    },
+  })
+})
+
+test("resolveTargetTab reports tab_not_found when the tab does not exist", () => {
+  const result = resolveTargetTab(undefined, { tabId: 99, windowId: 20 })
+
+  assert.deepEqual(result, {
+    error: {
+      code: "tab_not_found",
+      message: "The requested Zen tab was not found.",
+      details: { tabId: 99, windowId: 20 },
+    },
+  })
 })

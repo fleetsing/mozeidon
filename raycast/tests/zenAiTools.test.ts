@@ -324,6 +324,86 @@ test("zen_search_tabs returns a structured error when query input is missing", a
   if (!result.ok) assert.equal(result.error.code, "invalid_input");
 });
 
+test("zen_get_tab_content reads a background tab directly without switching (spec 014 Phase 2)", async () => {
+  const switched: string[] = [];
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      getContextForTab: (tabId, windowId) =>
+        context({ title: "GitHub PR", url: "https://github.com/example/pull/1", tabId, windowId, markdown: "PR markdown" }),
+      switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
+    }),
+  );
+
+  assert.deepEqual(switched, []);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.focusChanged, false);
+    assert.equal(result.data.restoreFocus, true);
+    assert.equal(result.data.focusRestored, undefined);
+    assert.deepEqual(result.data.actualTab, { tabId: 2, windowId: 20, url: "https://github.com/example/pull/1", title: "GitHub PR" });
+    assert.equal(result.data.activation?.strategy, "direct");
+    assert.equal(result.data.activation?.succeeded, true);
+  }
+});
+
+test("zen_get_tab_content falls back to focus-then-read when the CLI predates context tab", async () => {
+  const switched: string[] = [];
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      contextForActiveTab: (tab) =>
+        context({ title: tab.title, url: tab.url, tabId: tab.id, windowId: tab.windowId, markdown: "PR markdown" }),
+      switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
+    }),
+  );
+
+  assert.deepEqual(switched, ["20:2", "10:1"]);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.activation?.strategy, "focus-then-read");
+    assert.equal(result.data.focusChanged, true);
+    assert.equal(result.data.focusRestored, true);
+  }
+});
+
+test("zen_get_tab_content fails closed on a direct-read tab mismatch without falling back", async () => {
+  const switched: string[] = [];
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      getContextForTab: () => context({ title: "Wrong Tab", url: "https://example.com", tabId: 99, windowId: 99 }),
+      switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
+    }),
+  );
+
+  assert.deepEqual(switched, []);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "target_tab_mismatch");
+    assert.deepEqual(result.details?.actualTab, { tabId: 99, windowId: 99, url: "https://example.com", title: "Wrong Tab" });
+  }
+});
+
+test("zen_get_tab_content surfaces a genuine direct-read tab_not_found without falling back", async () => {
+  const switched: string[] = [];
+  const result = await zenGetTabContent(
+    { tabId: 2, windowId: 20 },
+    createDependencies({
+      tabs: sampleTabs(),
+      getContextForTabError: Object.assign(new Error("The requested Zen tab was not found."), { code: "tab_not_found" }),
+      switchTab: (windowId, tabId) => switched.push(`${windowId}:${tabId}`),
+    }),
+  );
+
+  assert.deepEqual(switched, []);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "tab_not_found");
+});
+
 test("zen_get_tab_content switches to an unambiguous tab, verifies it, and restores focus", async () => {
   const switched: string[] = [];
   const result = await zenGetTabContent(
@@ -568,6 +648,12 @@ function createDependencies(options: {
   contexts?: Partial<Record<"markdown" | "text" | "json", RaycastZenContext>>;
   contextForActiveTab?: (tab: MozeidonTab, format: "markdown" | "text" | "json") => RaycastZenContext;
   getContextError?: Error;
+  getContextForTab?: (
+    tabId: number,
+    windowId: number,
+    format: "markdown" | "text" | "json",
+  ) => RaycastZenContext;
+  getContextForTabError?: Error;
   zenSelection?: RaycastZenContext;
   getZenSelectionError?: Error & { code?: string };
   raycastSelectedText?: string;
@@ -589,6 +675,11 @@ function createDependencies(options: {
         if (active) return options.contextForActiveTab(active, format);
       }
       return options.contexts?.[format] ?? context({ markdown: "Default markdown" });
+    },
+    getContextForTab: async (tabId, windowId, format) => {
+      if (options.getContextForTabError) throw options.getContextForTabError;
+      if (options.getContextForTab) return options.getContextForTab(tabId, windowId, format);
+      throw oldCliContextError(`context tab --tab-id ${tabId} --window-id ${windowId} --format ${format}`);
     },
     getZenSelection: async () => {
       if (options.getZenSelectionError) throw options.getZenSelectionError;
