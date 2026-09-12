@@ -12,7 +12,12 @@ export function resolveTargetTab(
   tab: browser.Tabs.Tab | undefined,
   target: ContextTarget
 ): TargetTabResult {
-  if (!tab || tab.id === undefined || tab.windowId !== target.windowId) {
+  if (
+    !tab ||
+    tab.id === undefined ||
+    tab.id !== target.tabId ||
+    tab.windowId !== target.windowId
+  ) {
     return {
       error: {
         code: "tab_not_found",

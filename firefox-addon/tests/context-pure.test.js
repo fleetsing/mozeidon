@@ -339,6 +339,21 @@ test("resolveTargetTab matches a tab in the requested window", () => {
   assert.deepEqual(result, { tab: tab({ id: 2, windowId: 20 }) })
 })
 
+test("resolveTargetTab reports tab_not_found when the tab id does not match, even if the window does", () => {
+  const result = resolveTargetTab(tab({ id: 2, windowId: 20 }), {
+    tabId: 99,
+    windowId: 20,
+  })
+
+  assert.deepEqual(result, {
+    error: {
+      code: "tab_not_found",
+      message: "The requested Zen tab was not found.",
+      details: { tabId: 99, windowId: 20 },
+    },
+  })
+})
+
 test("resolveTargetTab reports tab_not_found when the tab exists in a different window", () => {
   const result = resolveTargetTab(tab({ id: 2, windowId: 20 }), {
     tabId: 2,
