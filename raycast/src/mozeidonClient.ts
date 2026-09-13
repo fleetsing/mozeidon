@@ -104,15 +104,34 @@ export async function* streamMozeidonLines(
   const context = buildMozeidonArgs(args, options).join(" ");
   const lines = readline.createInterface({ input: command.stdout });
   const lineIterator = lines[Symbol.asyncIterator]();
-  const processError = new Promise<never>((_, reject) => {
+
+  let stderr = "";
+  command.stderr.on("data", (chunk: Buffer | string) => {
+    stderr += chunk.toString();
+  });
+
+  // "close" is only ever emitted after the child's stdio streams (including
+  // stdout, which the line iterator below reads from) have already ended, so
+  // it must not be raced against line reads: by the time stdout ends, "close"
+  // may not have fired yet, and racing would let a bad exit code slip through
+  // once the line iterator resolves done first. Check it only once stdout is
+  // exhausted instead.
+  const spawnError = new Promise<never>((_, reject) => {
     command.once("error", (error) => reject(createMozeidonCommandError(error, context, "spawn")));
+  });
+  const closeCode = new Promise<number | null>((resolve) => {
+    command.once("close", resolve);
   });
 
   try {
     while (true) {
       const nextLine = lineIterator.next();
-      const result = await Promise.race([nextLine, processError]);
-      if (result.done) return;
+      const result = await Promise.race([nextLine, spawnError]);
+      if (result.done) {
+        const code = await closeCode;
+        if (code !== 0 && code !== null) throw createMozeidonExitError(code, stderr, context);
+        return;
+      }
       yield result.value;
     }
   } finally {
@@ -146,6 +165,15 @@ function createMozeidonCommandError(error: unknown, context: string, action: "ru
   const message = [`Failed to ${action} mozeidon command: ${context}`, stderr ?? stdout].filter(Boolean).join("\n");
 
   return new MozeidonClientError(errorCode, message, context, error, stderr, stdout);
+}
+
+function createMozeidonExitError(exitCode: number, stderr: string, context: string): MozeidonClientError {
+  const trimmedStderr = stderr.trim() || undefined;
+  const message = [`Failed to run mozeidon command: ${context}`, `Exited with code ${exitCode}.`, trimmedStderr]
+    .filter(Boolean)
+    .join("\n");
+
+  return new MozeidonClientError("command_failed", message, context, undefined, trimmedStderr);
 }
 
 function getProcessOutput(error: unknown, key: "stderr" | "stdout"): string | undefined {

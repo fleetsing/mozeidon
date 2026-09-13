@@ -59,23 +59,23 @@ Validation:
 
 ## Milestone 3: Raycast Feature Expansion Over Existing CLI
 
-Status: partially implemented.
+Status: implemented and manually verified, with one known deferred issue.
 
 Purpose: expose useful Mozeidon features without changing CLI/add-on.
 
 Candidate work:
 
-- History search/list.
-- Tab group list and group metadata display.
-- Duplicate tab.
-- Pin/unpin tab.
-- Move tab.
-- Bookmark create/update/delete where UX is clear.
+- History search/list. Implemented and verified; pagination bug found and fixed (Spec 016).
+- Tab group list and group metadata display. Implemented and verified.
+- Duplicate tab. Implemented and verified.
+- Pin/unpin tab. Implemented and verified.
+- Move tab. Move to End works; Move to Start is a known, deferred bug (see Spec 004's progress log) — not fixed, deprioritized by the user.
+- Bookmark create/update/delete where UX is clear. Implemented and verified; a dropdown-state bug found and fixed (Spec 016).
 
 Validation:
 
-- Confirmation gates for destructive actions.
-- Manual workflows in Zen.
+- Confirmation gates for destructive actions: verified.
+- Manual workflows in Zen: verified 2026-09-13 (specs 003–006, 016).
 
 ## Milestone 4: AI Extension Tools For `@zen`
 

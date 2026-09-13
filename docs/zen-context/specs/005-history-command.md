@@ -7,7 +7,7 @@ Expose Mozeidon browser history workflows in Raycast through a separate History 
 ## Status
 
 - Implemented in Raycast extension on 2026-04-28.
-- Local Zen/Raycast manual verification still required.
+- 2026-09-13: Manually verified against a real Zen session. Load, search (by title and by domain/URL), open, and confirmed delete all work correctly. **Bug found and fixed by Spec 016**: history was hard-capped at 500 items with no pagination, making anything older invisible to both browsing and search. Fixed by switching to the same chunked-streaming fetch (`history -c 500`) already proven for bookmarks.
 
 ## Milestone
 

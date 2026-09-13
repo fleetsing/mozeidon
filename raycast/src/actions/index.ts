@@ -1,4 +1,5 @@
 import { runAppleScript } from "@raycast/utils";
+import { closeMainWindow, PopToRootType } from "@raycast/api";
 import type { HistoryItem, MozeidonBookmark, MozeidonGroup, MozeidonTab, Tab, TabState } from "../interfaces";
 import { execFileSync } from "child_process";
 import { buildBrowserOpenArgs } from "../browserOpenCommand";
@@ -38,7 +39,7 @@ import {
 } from "../tabActionCommands";
 import { buildCreateBookmarkArgs, buildDeleteBookmarkArgs, buildUpdateBookmarkArgs } from "../bookmarkCommands";
 import type { CreateBookmarkInput, UpdateBookmarkInput } from "../bookmarkCommands";
-import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../historyCommands";
+import { buildDeleteHistoryItemArgs } from "../historyCommands";
 import { mapMozeidonHistoryItemsToHistoryItems, MozeidonHistoryPayload } from "../historyMappers";
 
 export function openNewTab(queryText: string | null | undefined): void {
@@ -83,13 +84,11 @@ export function ungroupTab(tab: Tab): void {
   runMozeidon(buildUngroupTabArgs(tab), getMozeidonOptions());
 }
 
-export function fetchHistory(): HistoryItem[] {
-  const parsedHistory = runMozeidonJson<MozeidonHistoryPayload>(buildFetchHistoryArgs(), {
-    ...getMozeidonOptions(),
-    context: "history --max 500",
-    fallback: TABS_FALLBACK,
-  });
-  return mapMozeidonHistoryItemsToHistoryItems(parsedHistory.data);
+export async function* getHistoryChunks() {
+  for await (const chunk of streamMozeidonLines(["history", "-c", "500"], getMozeidonOptions())) {
+    const { data: parsedHistory } = parseMozeidonJson<MozeidonHistoryPayload>(chunk, "history -c 500");
+    yield mapMozeidonHistoryItemsToHistoryItems(parsedHistory);
+  }
 }
 
 export function deleteHistoryItem(item: Pick<HistoryItem, "url">): void {
@@ -194,6 +193,21 @@ on error
 end try
 `);
   return isFirefoxRunning !== "false";
+}
+
+/**
+ * Ensures Zen is running before a command's data fetch proceeds. If Zen is
+ * not running, starts it and closes the Raycast window, since there is
+ * nothing meaningful to fetch yet. Returns false in that case so the caller
+ * can skip its fetch.
+ */
+export async function ensureFirefoxRunning(): Promise<boolean> {
+  const running = await isFirefoxRunning();
+  if (running) return true;
+
+  await startFirefox();
+  await closeMainWindow({ clearRootSearch: true, popToRootType: PopToRootType.Immediate });
+  return false;
 }
 
 function getMozeidonOptions() {

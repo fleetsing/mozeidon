@@ -7,6 +7,7 @@ Use existing Mozeidon CLI capabilities to enrich Raycast tab search with tab gro
 ## Status
 
 - Implemented
+- 2026-09-13: Manually verified against a real Zen session — tab group metadata (title/color tags) displays correctly in the tab list.
 
 ## Milestone
 

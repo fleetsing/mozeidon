@@ -7,7 +7,7 @@ Expose additional existing Mozeidon tab actions from the Raycast Action Panel fo
 ## Status
 
 - Implemented in Raycast extension on 2026-04-28.
-- Local Zen/Raycast manual verification still required.
+- 2026-09-13: Manually verified against a real Zen session. Pin, unpin, duplicate, move to group, and ungroup all work correctly with proper UI refresh. **Known issue, deferred**: Move Tab to Start does not move the tab (stays in place) — likely a pinned-tab index-clamping interaction in the browser (`browser.tabs.move` with `index: 0` may be constrained when pinned tabs occupy the lowest indices), not yet root-caused. Move Tab to End works correctly. Deprioritized by the user; not fixed as part of Spec 016. Switch/open/close and non-mutation-action visibility on closed tabs/bookmarks all confirmed correct.
 
 ## Milestone
 

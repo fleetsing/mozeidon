@@ -11,7 +11,7 @@ import {
   getAvailableBookmarkActionIds,
   validateBookmarkFolderPath,
 } from "../src/bookmarkCommands";
-import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../src/historyCommands";
+import { buildDeleteHistoryItemArgs } from "../src/historyCommands";
 import { mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
 import {
   MozeidonClientError,
@@ -264,9 +264,6 @@ test("bookmark inputs remain child process args", () => {
 });
 
 test("history command builders use safe CLI argument shapes", () => {
-  assert.deepEqual(buildFetchHistoryArgs(), ["history", "--max", "500"]);
-  assert.deepEqual(buildFetchHistoryArgs(50), ["history", "--max", "50"]);
-  assert.deepEqual(buildFetchHistoryArgs(0), ["history"]);
   assert.deepEqual(buildDeleteHistoryItemArgs({ url: "https://example.com/page" }), [
     "history",
     "delete",
@@ -532,6 +529,46 @@ test("streamMozeidonLines converts async spawn errors to classified errors", asy
     assert.equal(error.context, "bookmarks -c 1000");
     return true;
   });
+});
+
+test("streamMozeidonLines rejects when the process exits non-zero without yielding lines", async () => {
+  const process = createFakeProcess();
+  const lines = streamMozeidonLines(["history", "-c", "500"], {
+    executable: "mozeidon",
+    spawnProcess: () => process,
+  });
+  const nextLine = lines.next();
+
+  process.stderr.push('Error: unknown command "history" for "mozeidon"\n');
+  process.stderr.push(null);
+  process.stdout.push(null);
+  // Real child processes only emit "close" after stdio streams (stdout
+  // included) have already ended. Defer it to a later macrotask so this
+  // test exercises that ordering instead of the reverse.
+  setImmediate(() => process.emit("close", 1));
+
+  await assert.rejects(nextLine, (error) => {
+    assert.ok(error instanceof MozeidonClientError);
+    assert.equal(error.code, "command_failed");
+    assert.equal(error.context, "history -c 500");
+    assert.match(error.stderr ?? "", /unknown command "history"/);
+    return true;
+  });
+});
+
+test("streamMozeidonLines does not reject when the process exits zero", async () => {
+  const process = createFakeProcess();
+  const lines = streamMozeidonLines(["bookmarks", "-c", "1000"], {
+    executable: "mozeidon",
+    spawnProcess: () => process,
+  });
+
+  process.stdout.push('{"data":[]}\n');
+  process.stdout.push(null);
+  setImmediate(() => process.emit("close", 0));
+
+  assert.deepEqual(await lines.next(), { done: false, value: '{"data":[]}' });
+  assert.deepEqual(await lines.next(), { done: true, value: undefined });
 });
 
 test("parseMozeidonJson parses tabs and bookmark payloads", () => {
