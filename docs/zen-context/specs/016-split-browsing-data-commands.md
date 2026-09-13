@@ -34,7 +34,7 @@ Split the combined "Zen Tabs" Raycast command (opened tabs / recently closed tab
 
 ## Proposed Design
 
-- Replace `useMozeidonTabs()` (singleton + switch) with three small hooks in `raycast/src/hooks/useMozeidon.tsx` — `useOpenTabs()`, `useRecentlyClosedTabs()`, `useBookmarksList()` — each following `history.tsx`'s already-proven pattern: mount effect → `ensureFirefoxRunning()` → fetch → `setState`.
+- Replace `useMozeidonTabs()` (singleton + switch) with three small hooks in `raycast/src/hooks/useMozeidon.tsx` — `useOpenTabs()`, `useRecentlyClosedTabs()`, `useBookmarks()` — each following `history.tsx`'s already-proven pattern: mount effect → `ensureFirefoxRunning()` → fetch → `setState`.
 - Add `ensureFirefoxRunning()` to `raycast/src/actions/index.ts`, factoring out the "is Zen running, start it and close Raycast if not" preamble that was duplicated between `useMozeidon.tsx` and `history.tsx`; all four call sites (three hooks + `history.tsx`) now share it.
 - Add `TabList.View` (new static method on `raycast/src/components/TabList.tsx`'s `TabList` class) — the shared `<List>` rendering (tab items + "New Tab" section) that all three tab-related commands use, parameterized by a fixed `type` and simple per-command callback props. This avoids tripling the view JSX across three near-identical entry-point files. `windowCount`/`lastTabIndexByWindow` are computed unconditionally inside it, matching prior behavior (harmless no-ops for non-open-tab types).
 - Delete `raycast/src/components/TabTypeDropDown.tsx` (no longer used anywhere).
