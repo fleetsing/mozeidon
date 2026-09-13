@@ -25,26 +25,39 @@ export default function HistoryCommand(): ReactElement {
   const [errorView, setErrorView] = useState<ReactElement | undefined>();
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadHistory() {
       try {
         setIsLoading(true);
         if (!(await ensureFirefoxRunning())) return;
+        if (cancelled) return;
 
         setHistoryItems([]);
         for await (const chunk of getHistoryChunks()) {
+          if (cancelled) return;
           setHistoryItems((currentItems) => [...currentItems, ...chunk]);
         }
       } catch (_) {
-        setErrorView(<UnknownError />);
+        if (!cancelled) setErrorView(<UnknownError />);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
 
     loadHistory();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const sortedHistoryItems = useMemo(() => sortHistoryItems(historyItems), [historyItems]);
+  // Sort only once loading completes; chunks already arrive in roughly
+  // chronological order, so re-sorting the growing list on every chunk
+  // would be wasted work for a large history.
+  const sortedHistoryItems = useMemo(
+    () => (isLoading ? historyItems : sortHistoryItems(historyItems)),
+    [historyItems, isLoading],
+  );
 
   if (errorView) return errorView;
 

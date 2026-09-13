@@ -1,7 +1,7 @@
 import { ReactElement } from "react";
 import { TabList } from "./components";
 import { TAB_TYPE } from "./constants";
-import { useBookmarksList } from "./hooks/useMozeidon";
+import { useBookmarks } from "./hooks/useMozeidon";
 
 export default function Command(): ReactElement {
   const [
@@ -12,7 +12,7 @@ export default function Command(): ReactElement {
     },
     ,
     setData,
-  ] = useBookmarksList();
+  ] = useBookmarks();
 
   return (
     <TabList.View

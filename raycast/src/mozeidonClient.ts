@@ -104,8 +104,17 @@ export async function* streamMozeidonLines(
   const context = buildMozeidonArgs(args, options).join(" ");
   const lines = readline.createInterface({ input: command.stdout });
   const lineIterator = lines[Symbol.asyncIterator]();
+
+  let stderr = "";
+  command.stderr.on("data", (chunk: Buffer | string) => {
+    stderr += chunk.toString();
+  });
+
   const processError = new Promise<never>((_, reject) => {
     command.once("error", (error) => reject(createMozeidonCommandError(error, context, "spawn")));
+    command.once("close", (code) => {
+      if (code !== 0 && code !== null) reject(createMozeidonExitError(code, stderr, context));
+    });
   });
 
   try {
@@ -146,6 +155,15 @@ function createMozeidonCommandError(error: unknown, context: string, action: "ru
   const message = [`Failed to ${action} mozeidon command: ${context}`, stderr ?? stdout].filter(Boolean).join("\n");
 
   return new MozeidonClientError(errorCode, message, context, error, stderr, stdout);
+}
+
+function createMozeidonExitError(exitCode: number, stderr: string, context: string): MozeidonClientError {
+  const trimmedStderr = stderr.trim() || undefined;
+  const message = [`Failed to run mozeidon command: ${context}`, `Exited with code ${exitCode}.`, trimmedStderr]
+    .filter(Boolean)
+    .join("\n");
+
+  return new MozeidonClientError("command_failed", message, context, undefined, trimmedStderr);
 }
 
 function getProcessOutput(error: unknown, key: "stderr" | "stdout"): string | undefined {

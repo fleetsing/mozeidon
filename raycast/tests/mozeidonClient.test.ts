@@ -531,6 +531,43 @@ test("streamMozeidonLines converts async spawn errors to classified errors", asy
   });
 });
 
+test("streamMozeidonLines rejects when the process exits non-zero without yielding lines", async () => {
+  const process = createFakeProcess();
+  const lines = streamMozeidonLines(["history", "-c", "500"], {
+    executable: "mozeidon",
+    spawnProcess: () => process,
+  });
+  const nextLine = lines.next();
+
+  process.stderr.push('Error: unknown command "history" for "mozeidon"\n');
+  process.stderr.push(null);
+  process.stdout.push(null);
+  process.emit("close", 1);
+
+  await assert.rejects(nextLine, (error) => {
+    assert.ok(error instanceof MozeidonClientError);
+    assert.equal(error.code, "command_failed");
+    assert.equal(error.context, "history -c 500");
+    assert.match(error.stderr ?? "", /unknown command "history"/);
+    return true;
+  });
+});
+
+test("streamMozeidonLines does not reject when the process exits zero", async () => {
+  const process = createFakeProcess();
+  const lines = streamMozeidonLines(["bookmarks", "-c", "1000"], {
+    executable: "mozeidon",
+    spawnProcess: () => process,
+  });
+
+  process.stdout.push('{"data":[]}\n');
+  process.stdout.push(null);
+  process.emit("close", 0);
+
+  assert.deepEqual(await lines.next(), { done: false, value: '{"data":[]}' });
+  assert.deepEqual(await lines.next(), { done: true, value: undefined });
+});
+
 test("parseMozeidonJson parses tabs and bookmark payloads", () => {
   const tabs = parseMozeidonJson<{ data: Array<{ id: number; title: string }> }>(
     '{"data":[{"id":1,"title":"Example"}]}',
