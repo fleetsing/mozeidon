@@ -542,7 +542,10 @@ test("streamMozeidonLines rejects when the process exits non-zero without yieldi
   process.stderr.push('Error: unknown command "history" for "mozeidon"\n');
   process.stderr.push(null);
   process.stdout.push(null);
-  process.emit("close", 1);
+  // Real child processes only emit "close" after stdio streams (stdout
+  // included) have already ended. Defer it to a later macrotask so this
+  // test exercises that ordering instead of the reverse.
+  setImmediate(() => process.emit("close", 1));
 
   await assert.rejects(nextLine, (error) => {
     assert.ok(error instanceof MozeidonClientError);
@@ -562,7 +565,7 @@ test("streamMozeidonLines does not reject when the process exits zero", async ()
 
   process.stdout.push('{"data":[]}\n');
   process.stdout.push(null);
-  process.emit("close", 0);
+  setImmediate(() => process.emit("close", 0));
 
   assert.deepEqual(await lines.next(), { done: false, value: '{"data":[]}' });
   assert.deepEqual(await lines.next(), { done: true, value: undefined });

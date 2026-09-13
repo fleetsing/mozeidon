@@ -110,18 +110,28 @@ export async function* streamMozeidonLines(
     stderr += chunk.toString();
   });
 
-  const processError = new Promise<never>((_, reject) => {
+  // "close" is only ever emitted after the child's stdio streams (including
+  // stdout, which the line iterator below reads from) have already ended, so
+  // it must not be raced against line reads: by the time stdout ends, "close"
+  // may not have fired yet, and racing would let a bad exit code slip through
+  // once the line iterator resolves done first. Check it only once stdout is
+  // exhausted instead.
+  const spawnError = new Promise<never>((_, reject) => {
     command.once("error", (error) => reject(createMozeidonCommandError(error, context, "spawn")));
-    command.once("close", (code) => {
-      if (code !== 0 && code !== null) reject(createMozeidonExitError(code, stderr, context));
-    });
+  });
+  const closeCode = new Promise<number | null>((resolve) => {
+    command.once("close", resolve);
   });
 
   try {
     while (true) {
       const nextLine = lineIterator.next();
-      const result = await Promise.race([nextLine, processError]);
-      if (result.done) return;
+      const result = await Promise.race([nextLine, spawnError]);
+      if (result.done) {
+        const code = await closeCode;
+        if (code !== 0 && code !== null) throw createMozeidonExitError(code, stderr, context);
+        return;
+      }
       yield result.value;
     }
   } finally {
