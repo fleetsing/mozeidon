@@ -73,9 +73,23 @@
   "commands": [
     {
       "name": "mozeidon",
-      "title": "Zen Tabs",
+      "title": "Zen Open Tabs",
       "subtitle": "Zen Browser",
-      "description": "Search and switch to Zen tabs, recently closed tabs, bookmarks, etc",
+      "description": "Search and switch to open Zen tabs",
+      "mode": "view"
+    },
+    {
+      "name": "recently-closed-tabs",
+      "title": "Zen Recently Closed Tabs",
+      "subtitle": "Zen Browser",
+      "description": "Search and reopen recently closed Zen tabs",
+      "mode": "view"
+    },
+    {
+      "name": "bookmarks",
+      "title": "Zen Bookmarks",
+      "subtitle": "Zen Browser",
+      "description": "Search, create, edit, and delete Zen bookmarks",
       "mode": "view"
     },
     {

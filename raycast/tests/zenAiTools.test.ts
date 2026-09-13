@@ -29,6 +29,8 @@ test("manifest exposes the approved AI tools and Zen Context commands", () => {
     manifest.commands.map((command) => command.name),
     [
       "mozeidon",
+      "recently-closed-tabs",
+      "bookmarks",
       "history",
       "copy-current-page-as-markdown",
       "summarize-current-page",

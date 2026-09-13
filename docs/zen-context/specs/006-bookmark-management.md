@@ -7,7 +7,7 @@ Expose Mozeidon bookmark create, update, and delete workflows in the Raycast ext
 ## Status
 
 - Implemented
-- Manual Zen verification still required.
+- 2026-09-13: Manually verified against a real Zen session. Existing bookmark search/open, add bookmark for a selected open tab, edit title/URL, invalid-folder-path error handling, and confirmed delete all work correctly. **Bug found and fixed by Spec 016**: the combined command's dropdown could restore to the Bookmarks view on relaunch while showing an empty list (a `storeValue`/data-fetch desync); fixed by giving Bookmarks its own dedicated command with independent state.
 
 ## Milestone
 

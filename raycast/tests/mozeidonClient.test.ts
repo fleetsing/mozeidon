@@ -11,7 +11,7 @@ import {
   getAvailableBookmarkActionIds,
   validateBookmarkFolderPath,
 } from "../src/bookmarkCommands";
-import { buildDeleteHistoryItemArgs, buildFetchHistoryArgs } from "../src/historyCommands";
+import { buildDeleteHistoryItemArgs } from "../src/historyCommands";
 import { mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
 import {
   MozeidonClientError,
@@ -264,9 +264,6 @@ test("bookmark inputs remain child process args", () => {
 });
 
 test("history command builders use safe CLI argument shapes", () => {
-  assert.deepEqual(buildFetchHistoryArgs(), ["history", "--max", "500"]);
-  assert.deepEqual(buildFetchHistoryArgs(50), ["history", "--max", "50"]);
-  assert.deepEqual(buildFetchHistoryArgs(0), ["history"]);
   assert.deepEqual(buildDeleteHistoryItemArgs({ url: "https://example.com/page" }), [
     "history",
     "delete",

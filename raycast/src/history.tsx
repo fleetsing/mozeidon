@@ -13,7 +13,7 @@ import {
 } from "@raycast/api";
 import { getFavicon } from "@raycast/utils";
 import { ReactElement, useEffect, useMemo, useState } from "react";
-import { deleteHistoryItem, fetchHistory, isFirefoxRunning, openNewTab, startFirefox } from "./actions";
+import { deleteHistoryItem, ensureFirefoxRunning, getHistoryChunks, openNewTab } from "./actions";
 import { UnknownError } from "./components/Error";
 import { COMMAND_NAME } from "./constants";
 import type { HistoryItem } from "./interfaces";
@@ -28,14 +28,12 @@ export default function HistoryCommand(): ReactElement {
     async function loadHistory() {
       try {
         setIsLoading(true);
-        const isBrowserRunning = await isFirefoxRunning();
-        if (!isBrowserRunning) {
-          await startFirefox();
-          await closeMainWindow({ clearRootSearch: true, popToRootType: PopToRootType.Immediate });
-          return;
-        }
+        if (!(await ensureFirefoxRunning())) return;
 
-        setHistoryItems(fetchHistory());
+        setHistoryItems([]);
+        for await (const chunk of getHistoryChunks()) {
+          setHistoryItems((currentItems) => [...currentItems, ...chunk]);
+        }
       } catch (_) {
         setErrorView(<UnknownError />);
       } finally {
