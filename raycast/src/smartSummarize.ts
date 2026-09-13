@@ -77,11 +77,12 @@ export async function resolveSmartSummarizeContext(
 
   const raycastSelectedText = trimToText(await dependencies.getRaycastSelectedText());
   if (raycastSelectedText) {
-    const metadata = await resolveRaycastSelectionMetadata(dependencies, zenSelection);
+    // Raycast's selected-text API reads whatever is highlighted in the
+    // frontmost app, which is not scoped to Zen. Don't attach the Zen
+    // page's title/URL here — that text may have nothing to do with it.
     return {
       source: "raycast-selection",
       text: raycastSelectedText,
-      ...metadata,
     };
   }
 
@@ -232,24 +233,6 @@ function getSourceMetadata(context: ZenContext | undefined): Pick<SmartSummarize
     title: trimToText(context?.page?.title) ?? trimToText(context?.tab?.title),
     url: trimToText(context?.page?.url) ?? trimToText(context?.tab?.url),
   };
-}
-
-async function resolveRaycastSelectionMetadata(
-  dependencies: SmartSummarizeDependencies,
-  zenSelection: ZenContext | undefined,
-): Promise<Pick<SmartSummarizeContext, "title" | "url">> {
-  const selectionMetadata = getSourceMetadata(zenSelection);
-  if (selectionMetadata.title && selectionMetadata.url) return selectionMetadata;
-
-  try {
-    const activePageContext = await dependencies.getActivePageMarkdown();
-    return {
-      title: selectionMetadata.title ?? getSourceMetadata(activePageContext).title,
-      url: selectionMetadata.url ?? getSourceMetadata(activePageContext).url,
-    };
-  } catch (_) {
-    return selectionMetadata;
-  }
 }
 
 function mapMozeidonErrorCode(code: string | undefined): SmartSummarizeErrorCode {

@@ -299,17 +299,19 @@ export async function zenGetSelectionOrPage(
 
     const raycastSelection = trimToText(await dependencies.getRaycastSelectedText());
     if (raycastSelection) {
-      const source = await resolveRaycastSelectionSource(zenSelection, format, dependencies);
+      // Raycast's selected-text API reads whatever is highlighted in the
+      // frontmost app, which is not scoped to Zen. Don't attach Zen page
+      // metadata here — that text may have nothing to do with it.
       return ok(
         "zen_get_selection_or_page",
         {
-          source: source.source,
+          source: {},
           kind: "raycast-selection",
           format,
           text: raycastSelection,
           markdown: format === "markdown" ? raycastSelection : undefined,
         },
-        source.warnings,
+        zenSelection.warnings,
       );
     }
 
@@ -913,33 +915,6 @@ async function recoverableZenSelection(dependencies: ZenAiToolDependencies): Pro
   }
 }
 
-async function resolveRaycastSelectionSource(
-  zenSelection: RaycastZenContext,
-  format: "markdown" | "text",
-  dependencies: ZenAiToolDependencies,
-): Promise<{ source: ZenSource; warnings: string[] }> {
-  const selectionSource = sourceFromContext(zenSelection);
-  if (hasSourceMetadata(selectionSource)) {
-    return {
-      source: selectionSource,
-      warnings: zenSelection.warnings,
-    };
-  }
-
-  try {
-    const activeContext = await dependencies.getContext(format);
-    return {
-      source: mergeSource(selectionSource, sourceFromContext(activeContext)),
-      warnings: uniqueWarnings([...zenSelection.warnings, ...activeContext.warnings]),
-    };
-  } catch (_) {
-    return {
-      source: selectionSource,
-      warnings: zenSelection.warnings,
-    };
-  }
-}
-
 function matchTabTarget(tabs: ZenToolTab[], input: ZenGetTabContentInput): ZenToolTab {
   const matches =
     input.tabId !== undefined && input.windowId !== undefined
@@ -1022,22 +997,6 @@ function sourceFromTab(tab: ZenToolTab): ZenSource {
     windowId: tab.windowId,
     active: tab.active,
   };
-}
-
-function hasSourceMetadata(source: ZenSource): boolean {
-  return Boolean(trimToText(source.title) && trimToText(source.url));
-}
-
-function mergeSource(primary: ZenSource, fallback: ZenSource): ZenSource {
-  return {
-    ...primary,
-    title: primary.title ?? fallback.title,
-    url: primary.url ?? fallback.url,
-  };
-}
-
-function uniqueWarnings(warnings: string[]): string[] {
-  return [...new Set(warnings.filter(Boolean))];
 }
 
 function getErrorCode(error: unknown): string | undefined {

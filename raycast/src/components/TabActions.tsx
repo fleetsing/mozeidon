@@ -45,7 +45,6 @@ function NewTabAction({ query }: { query?: string }) {
   return (
     <ActionPanel title="New Tab">
       <OpenNewTabAction query={query || ""} />
-      <Action onAction={() => openNewTab(query)} title={query ? `Search "${query}"` : "Open Empty Tab"} />
     </ActionPanel>
   );
 }

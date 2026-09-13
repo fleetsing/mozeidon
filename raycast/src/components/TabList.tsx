@@ -1,13 +1,12 @@
 import { Icon, Image, List } from "@raycast/api";
 import { getFavicon } from "@raycast/utils";
-import { ReactNode, useState } from "react";
+import { ReactNode } from "react";
 import { TabActions } from "./index";
 import { Tab, TabGroup } from "../interfaces";
-import { SEARCH_ENGINE, TAB_TYPE } from "../constants";
+import { TAB_TYPE } from "../constants";
 import { buildLastTabIndexByWindow } from "../tabActionCommands";
 import { buildTabKeywords, buildTabMetadata, getDistinctWindowCount } from "../tabMetadata";
 
-type NewTabItemProps = { searchText?: string };
 type TabItemProps = {
   isLoading: boolean;
   type: TAB_TYPE;
@@ -35,7 +34,6 @@ type TabListViewProps = {
 };
 
 export class TabList {
-  public static NewTabItem = NewTabItem;
   public static TabItem = TabItem;
   public static View = TabListView;
 }
@@ -52,7 +50,6 @@ function TabListView({
   onDeleteBookmark,
   onUpdateBookmark,
 }: TabListViewProps) {
-  const [searchText, setSearchText] = useState<string>("");
   const windowCount = getDistinctWindowCount(tabs);
   const lastTabIndexByWindow = buildLastTabIndexByWindow(tabs);
 
@@ -61,7 +58,6 @@ function TabListView({
     <List
       isLoading={isLoading}
       throttle={true}
-      onSearchTextChange={setSearchText}
       filtering={{ keepSectionOrder: true }}
       navigationTitle={navigationTitle}
     >
@@ -82,20 +78,7 @@ function TabListView({
           />
         ))}
       </List.Section>
-      <List.Section title="New Tab">
-        <NewTabItem searchText={searchText} />
-      </List.Section>
     </List>
-  );
-}
-
-function NewTabItem({ searchText }: NewTabItemProps) {
-  return (
-    <List.Item
-      title={!searchText ? "Open Empty Tab" : `Search ${SEARCH_ENGINE} "${searchText}"`}
-      icon={{ source: !searchText ? Icon.Plus : Icon.MagnifyingGlass }}
-      actions={<TabActions.NewTab query={searchText} />}
-    />
   );
 }
 

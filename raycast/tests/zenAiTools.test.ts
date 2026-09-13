@@ -28,6 +28,7 @@ test("manifest exposes the approved AI tools and Zen Context commands", () => {
   assert.deepEqual(
     manifest.commands.map((command) => command.name),
     [
+      "zen-open",
       "mozeidon",
       "recently-closed-tabs",
       "bookmarks",
@@ -207,13 +208,6 @@ test("zen_get_selection_or_page falls back to Raycast selection when Zen selecti
         code: "permission_unavailable",
       }),
       raycastSelectedText: "Raycast selected text",
-      contexts: {
-        markdown: context({
-          title: "Active Article",
-          url: "https://example.com/active",
-          markdown: "Active page markdown",
-        }),
-      },
     }),
   );
 
@@ -221,14 +215,14 @@ test("zen_get_selection_or_page falls back to Raycast selection when Zen selecti
   if (result.ok) {
     assert.equal(result.data.kind, "raycast-selection");
     assert.equal(result.data.text, "Raycast selected text");
-    assert.deepEqual(result.data.source, {
-      title: "Active Article",
-      url: "https://example.com/active",
-    });
+    assert.deepEqual(result.data.source, {});
   }
 });
 
-test("zen_get_selection_or_page falls back to Raycast selection with Zen metadata", async () => {
+test("zen_get_selection_or_page does not attach Zen page metadata to a Raycast selection", async () => {
+  // getRaycastSelectedText() reads whatever is highlighted in the frontmost
+  // app, not scoped to Zen, so the Zen page's title/URL must not be
+  // attached to text that may have nothing to do with it.
   const result = await zenGetSelectionOrPage(
     {},
     createDependencies({
@@ -244,37 +238,33 @@ test("zen_get_selection_or_page falls back to Raycast selection with Zen metadat
   if (result.ok) {
     assert.equal(result.data.kind, "raycast-selection");
     assert.equal(result.data.text, "Raycast selected text");
-    assert.deepEqual(result.data.source, {
-      title: "Article",
-      url: "https://example.com/article",
-    });
+    assert.deepEqual(result.data.source, {});
   }
 });
 
-test("zen_get_selection_or_page attaches active page metadata to Raycast selection when Zen metadata is missing", async () => {
+test("zen_get_selection_or_page does not fetch active page context for a Raycast selection", async () => {
+  const calls: string[] = [];
+  const dependencies = createDependencies({
+    zenSelection: context({}),
+    raycastSelectedText: "Raycast selected text",
+  });
   const result = await zenGetSelectionOrPage(
     {},
-    createDependencies({
-      zenSelection: context({}),
-      raycastSelectedText: "Raycast selected text",
-      contexts: {
-        markdown: context({
-          title: "Active Article",
-          url: "https://example.com/active",
-          markdown: "Active page markdown",
-        }),
+    {
+      ...dependencies,
+      getContext: async (format) => {
+        calls.push("active-page");
+        return dependencies.getContext(format);
       },
-    }),
+    },
   );
 
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.data.kind, "raycast-selection");
-    assert.deepEqual(result.data.source, {
-      title: "Active Article",
-      url: "https://example.com/active",
-    });
+    assert.deepEqual(result.data.source, {});
   }
+  assert.deepEqual(calls, []);
 });
 
 test("zen_get_selection_or_page falls back to active page content when no selection exists", async () => {

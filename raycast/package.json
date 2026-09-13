@@ -72,6 +72,13 @@
   ],
   "commands": [
     {
+      "name": "zen-open",
+      "title": "Zen Open",
+      "subtitle": "Zen Browser",
+      "description": "Open a new Zen tab or search the web",
+      "mode": "view"
+    },
+    {
       "name": "mozeidon",
       "title": "Zen Open Tabs",
       "subtitle": "Zen Browser",

@@ -90,12 +90,13 @@ test("Smart Summarize falls back to Raycast selected text when Zen selection is 
   assert.deepEqual(context, {
     source: "raycast-selection",
     text: "Raycast selected fallback",
-    title: "Permissioned Article",
-    url: "https://example.com/permissioned",
   });
 });
 
-test("Smart Summarize attaches Zen title and URL metadata to Raycast selected text when available", async () => {
+test("Smart Summarize does not attach Zen page metadata to Raycast selected text", async () => {
+  // getSelectedText() reads whatever is highlighted in the frontmost app,
+  // not scoped to Zen, so the Zen page's title/URL must not be attached to
+  // text that may have nothing to do with it.
   const context = await resolveSmartSummarizeContext(
     createDependencies({
       zenSelection: createPermissionUnavailableSelectionContext({
@@ -109,11 +110,11 @@ test("Smart Summarize attaches Zen title and URL metadata to Raycast selected te
 
   assert.equal(context.source, "raycast-selection");
   assert.equal(context.text, "Selected outside DOM grant");
-  assert.equal(context.title, "Zen Source");
-  assert.equal(context.url, "https://example.com/source");
+  assert.equal(context.title, undefined);
+  assert.equal(context.url, undefined);
 });
 
-test("Smart Summarize attaches active page metadata to Raycast selected text when Zen metadata is missing", async () => {
+test("Smart Summarize does not fetch active page markdown when Raycast selected text is used", async () => {
   const calls: string[] = [];
   const context = await resolveSmartSummarizeContext({
     getZenSelection: async () => {
@@ -133,12 +134,10 @@ test("Smart Summarize attaches active page metadata to Raycast selected text whe
     },
   });
 
-  assert.deepEqual(calls, ["zen-selection", "raycast-selection", "active-page"]);
+  assert.deepEqual(calls, ["zen-selection", "raycast-selection"]);
   assert.deepEqual(context, {
     source: "raycast-selection",
     text: "Selected outside DOM grant",
-    title: "Active Source",
-    url: "https://example.com/active",
   });
 });
 
@@ -160,8 +159,6 @@ test("Smart Summarize falls back to Raycast selected text when Zen selection thr
   assert.deepEqual(context, {
     source: "raycast-selection",
     text: "Raycast selected fallback",
-    title: "Active Source",
-    url: "https://example.com/active",
   });
 });
 
