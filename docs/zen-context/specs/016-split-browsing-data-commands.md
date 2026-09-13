@@ -8,6 +8,7 @@ Split the combined "Zen Tabs" Raycast command (opened tabs / recently closed tab
 
 - Implemented
 - 2026-09-13: Manual verification of specs 003–006 completed for all items except Move Tab to Start/End (see spec 004's progress log). Surfaced two bugs and a UX decision, addressed here.
+- 2026-09-13: This spec's own fix manually verified against a real Zen session — the three split commands ("Zen Open Tabs", "Zen Recently Closed Tabs", "Zen Bookmarks") appear correctly, no empty-list-on-relaunch across repeated open/close cycles, existing tab/bookmark actions unaffected, and `Zen History` now shows and searches entries beyond the old 500-item cap. Considered verified end-to-end.
 
 ## Problem
 
