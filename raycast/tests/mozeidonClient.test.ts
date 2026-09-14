@@ -442,6 +442,12 @@ test("parseAsUrl treats a bare domain with no scheme as a direct URL", () => {
   assert.equal(parseAsUrl("github.com")?.toString(), "https://github.com/");
 });
 
+test("parseAsUrl does not treat an email-like input as a direct URL", () => {
+  // new URL() parses "user@host" as userinfo, so without this guard an
+  // email address would silently become a credentialed URL open.
+  assert.equal(parseAsUrl("user@example.com"), undefined);
+});
+
 test("parseAsUrl does not treat plain words or multi-word phrases as URLs", () => {
   assert.equal(parseAsUrl("zen"), undefined);
   assert.equal(parseAsUrl("node.js tutorial"), undefined);

@@ -65,7 +65,10 @@ export function parseAsUrl(queryText: string): URL | undefined {
   // rejects it. Treat it as a direct open, not a search, when it has no
   // whitespace and looks like a real domain (a dot in the hostname) once
   // "https://" is assumed — matching how browser address bars behave.
-  if (/\s/.test(queryText)) return undefined;
+  // Reject "@" up front: new URL() parses "user@host" as userinfo, which
+  // would silently turn something like an email address into a credentialed
+  // URL open instead of a search.
+  if (/\s/.test(queryText) || queryText.includes("@")) return undefined;
 
   const withScheme = tryParseUrl(`https://${queryText}`);
   if (withScheme && withScheme.hostname.includes(".")) return withScheme;
