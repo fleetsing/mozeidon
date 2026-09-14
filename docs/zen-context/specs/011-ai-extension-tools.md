@@ -268,7 +268,7 @@ Behavior:
 
 Description:
 
-Get selected Zen text when available, otherwise fall back to Raycast selected text (with an empty `source`, since that text is not scoped to Zen — see Spec 017), otherwise return active page content.
+Get selected Zen text when available, otherwise return active Zen page content, otherwise fall back to Raycast selected text as a last resort (with an empty `source`, since that text is not scoped to Zen — see Spec 017).
 
 Input schema:
 
@@ -284,13 +284,13 @@ Defaults:
 - `format: "markdown"`
 - `requireContent: true`
 
-Resolution order:
+Resolution order (Spec 018 reordered steps 2 and 4 so the active page wins over an unrelated OS-level selection whenever Zen has something usable):
 
 1. Use Mozeidon/Zen DOM selection if available and non-empty.
-2. If Zen selection is unavailable, permission-blocked, or empty, try Raycast selected text.
-3. If Raycast selected text exists, attach active Zen tab/page title and URL when available.
-4. If no selected text exists, return active page Markdown/text.
-5. If only title/URL fallback exists and `requireContent` is true, return `content_unavailable`.
+2. If Zen selection is unavailable, permission-blocked, or empty, try active page Markdown/text.
+3. If the active page is usable (or `requireContent` is false), return it.
+4. Otherwise, try Raycast selected text as a last resort — no Zen title/URL is attached to it, since that text is not scoped to Zen.
+5. If nothing at all is usable and `requireContent` is true, return `content_unavailable`.
 
 Output:
 
