@@ -57,14 +57,20 @@ export function buildMozeidonArgs(args: string[], options?: { profileId?: string
   return ["--profile-id", profileId, ...args];
 }
 
+export function parseAsUrl(queryText: string): URL | undefined {
+  try {
+    return new URL(queryText);
+  } catch (_) {
+    return undefined;
+  }
+}
+
 export function buildNewTabArgs(queryText: string | null | undefined, searchEngineBaseUrl: string): string[] {
   if (!queryText) return ["tabs", "new"];
 
-  try {
-    return ["tabs", "new", "--", new URL(queryText).toString()];
-  } catch (_) {
-    return ["tabs", "new", "--", `${searchEngineBaseUrl}${encodeURIComponent(queryText)}`];
-  }
+  const url = parseAsUrl(queryText);
+  if (url) return ["tabs", "new", "--", url.toString()];
+  return ["tabs", "new", "--", `${searchEngineBaseUrl}${encodeURIComponent(queryText)}`];
 }
 
 export function runMozeidon(args: string[], options: MozeidonRunOptions): string | Buffer {

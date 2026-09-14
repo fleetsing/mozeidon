@@ -99,7 +99,7 @@ If implementation discovers that existing CLI/context capabilities cannot suppor
 1. User selects text in Zen or another app.
 2. User writes: `@zen explain this selection in context`.
 3. Raycast chooses `zen_get_selection_or_page`.
-4. The tool prefers Zen DOM selection, falls back to Raycast selected text with Zen source metadata when available, then falls back to active page Markdown.
+4. The tool prefers Zen DOM selection, falls back to Raycast selected text (an empty `source`, since Raycast's selected-text API reads the frontmost app and is not scoped to Zen — see Spec 017), then falls back to active page Markdown.
 5. Raycast AI answers using the returned selected text or page content.
 
 ### Inspect Open Tabs
@@ -268,7 +268,7 @@ Behavior:
 
 Description:
 
-Get selected Zen text when available, otherwise fall back to Raycast selected text with Zen source metadata, otherwise return active page content.
+Get selected Zen text when available, otherwise fall back to Raycast selected text (with an empty `source`, since that text is not scoped to Zen — see Spec 017), otherwise return active page content.
 
 Input schema:
 
