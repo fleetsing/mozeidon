@@ -10,26 +10,32 @@ export function useOpenTabs(): TabsHookResult {
   const [data, setData] = useState<TabState>({ type: TAB_TYPE.OPENED_TABS, tabs: [] });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorView, setErrorView] = useState<ReactElement | undefined>();
-  const cancelledRef = useRef(false);
+  const latestRequestRef = useRef(0);
 
   async function refresh() {
+    const requestId = ++latestRequestRef.current;
+    const isStale = () => requestId !== latestRequestRef.current;
     try {
       setIsLoading(true);
       if (!(await ensureFirefoxRunning())) return;
-      if (cancelledRef.current) return;
+      if (isStale()) return;
       setData(fetchOpenTabs());
     } catch (error) {
-      if (!cancelledRef.current) setErrorView(<UnknownError />);
+      if (!isStale()) setErrorView(<UnknownError />);
     } finally {
-      if (!cancelledRef.current) setIsLoading(false);
+      if (!isStale()) setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    cancelledRef.current = false;
     refresh();
     return () => {
-      cancelledRef.current = true;
+      // Invalidate this invocation's in-flight refresh, without blocking a
+      // later effect invocation's own refresh from completing normally.
+      // React StrictMode's mount->cleanup->mount double-invocation would
+      // otherwise let a stale refresh from the first mount commit state
+      // after the second mount's cleanup reset a shared cancelled flag.
+      latestRequestRef.current += 1;
     };
   }, []);
 
@@ -40,26 +46,27 @@ export function useRecentlyClosedTabs(): TabsHookResult {
   const [data, setData] = useState<TabState>({ type: TAB_TYPE.RECENTLY_CLOSED, tabs: [] });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorView, setErrorView] = useState<ReactElement | undefined>();
-  const cancelledRef = useRef(false);
+  const latestRequestRef = useRef(0);
 
   async function refresh() {
+    const requestId = ++latestRequestRef.current;
+    const isStale = () => requestId !== latestRequestRef.current;
     try {
       setIsLoading(true);
       if (!(await ensureFirefoxRunning())) return;
-      if (cancelledRef.current) return;
+      if (isStale()) return;
       setData(fetchRecentlyClosedTabs());
     } catch (error) {
-      if (!cancelledRef.current) setErrorView(<UnknownError />);
+      if (!isStale()) setErrorView(<UnknownError />);
     } finally {
-      if (!cancelledRef.current) setIsLoading(false);
+      if (!isStale()) setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    cancelledRef.current = false;
     refresh();
     return () => {
-      cancelledRef.current = true;
+      latestRequestRef.current += 1;
     };
   }, []);
 
@@ -70,34 +77,35 @@ export function useBookmarks(): TabsHookResult {
   const [data, setData] = useState<TabState>({ type: TAB_TYPE.BOOKMARKS, tabs: [] });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorView, setErrorView] = useState<ReactElement | undefined>();
-  const cancelledRef = useRef(false);
+  const latestRequestRef = useRef(0);
 
   async function refresh() {
+    const requestId = ++latestRequestRef.current;
+    const isStale = () => requestId !== latestRequestRef.current;
     try {
       setIsLoading(true);
       if (!(await ensureFirefoxRunning())) return;
-      if (cancelledRef.current) return;
+      if (isStale()) return;
 
       const bookmarksState: TabState = { type: TAB_TYPE.BOOKMARKS, tabs: [] };
       setData(bookmarksState);
       for await (const chunk of getBookmarksChunks()) {
-        if (cancelledRef.current) return;
+        if (isStale()) return;
         bookmarksState.tabs.push(...chunk);
         // copy a new state to progressively load bookmarks chunk by chunk.
         setData({ ...bookmarksState });
       }
     } catch (error) {
-      if (!cancelledRef.current) setErrorView(<UnknownError />);
+      if (!isStale()) setErrorView(<UnknownError />);
     } finally {
-      if (!cancelledRef.current) setIsLoading(false);
+      if (!isStale()) setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    cancelledRef.current = false;
     refresh();
     return () => {
-      cancelledRef.current = true;
+      latestRequestRef.current += 1;
     };
   }, []);
 

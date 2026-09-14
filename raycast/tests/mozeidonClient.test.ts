@@ -17,6 +17,7 @@ import {
   MozeidonClientError,
   buildMozeidonArgs,
   buildNewTabArgs,
+  parseAsUrl,
   parseMozeidonJson,
   runMozeidon,
   spawnMozeidon,
@@ -427,6 +428,12 @@ test("buildLastTabIndexByWindow precomputes reliable last indexes by window", ()
   ];
 
   assert.deepEqual([...buildLastTabIndexByWindow(tabs).entries()], [[456, 3]]);
+});
+
+test("parseAsUrl distinguishes valid URLs from plain search text", () => {
+  assert.equal(parseAsUrl("https://example.com/page")?.toString(), "https://example.com/page");
+  assert.equal(parseAsUrl("hello zen"), undefined);
+  assert.equal(parseAsUrl("www.google.com"), undefined);
 });
 
 test("buildNewTabArgs handles empty, URL, and search queries", () => {
