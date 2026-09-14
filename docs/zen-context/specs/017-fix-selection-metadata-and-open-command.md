@@ -64,6 +64,14 @@ No changes. `getSelectedText()` usage is unchanged (still the existing, sanction
 - No new component-level tests for `zen-open.tsx`: this codebase has no existing test coverage for the view layer (`TabList.tsx`, `mozeidon.tsx`, etc.), and this change doesn't alter that convention. The underlying `openNewTab`/`buildNewTabArgs` logic it reuses is already tested.
 - Manual Zen verification (see below).
 
+## Drive-By Fix: StrictMode Cancellation Bug In Tab-List Hooks
+
+While doing manual verification, all three tab-list commands (Open Tabs, Recently Closed, Bookmarks) suddenly showed a permanently empty list with `isLoading` stuck `true` — no error, no data, and (confirmed by testing with a deliberately broken CLI path) never even reaching the `mozeidon` CLI call. Bisection against a clean worktree of the last known-good commit (`b2b8eb7`, before this spec's changes) reproduced the identical failure with byte-identical hook code, proving this predates spec 017 and is unrelated to it.
+
+Root cause: `useOpenTabs`/`useRecentlyClosedTabs`/`useBookmarks` (`raycast/src/hooks/useMozeidon.tsx`) track effect cancellation with a `useRef(false)` that is shared for the component's entire lifetime, set to `true` only in the effect's cleanup. Under React StrictMode's double effect invocation (mount → effect → cleanup → effect again), the first invocation's cleanup sets the shared ref to `true` before the second, persisting invocation's `refresh()` call ever checks it — so that real call sees `cancelledRef.current === true` immediately, bails out before calling the CLI, and skips `setIsLoading(false)` in `finally`, leaving the list stuck loading forever. `history.tsx`'s equivalent effect was unaffected because it declares `let cancelled = false` fresh inside the effect closure on every invocation, rather than sharing a persistent ref — StrictMode's double-invoke gives each invocation its own independent flag there.
+
+This is a latent bug that predates this spec; it was not triggered by anything in this branch or in spec 016, and most likely started manifesting after a Raycast platform update began exercising StrictMode-style double effect invocation for extension commands (the user observed the failure begin with no local code or config changes). Fix: reset `cancelledRef.current = false` at the top of each `useEffect` invocation (before calling `refresh()`), giving each invocation the same fresh-per-run semantics as `history.tsx`'s local variable. Bundled into this branch/PR since it was found while verifying it and blocks that verification, even though it isn't part of this spec's original scope.
+
 ## Manual Verification With Zen
 
 1. In each of "Zen Open Tabs", "Zen Recently Closed Tabs", and "Zen Bookmarks": launch the command, press Down immediately — confirm focus starts on the first real item, not a phantom "New Tab" entry. Press Up from the first item — confirm it does not jump to the last tab in the list.

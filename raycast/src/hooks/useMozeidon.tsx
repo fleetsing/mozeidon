@@ -26,6 +26,7 @@ export function useOpenTabs(): TabsHookResult {
   }
 
   useEffect(() => {
+    cancelledRef.current = false;
     refresh();
     return () => {
       cancelledRef.current = true;
@@ -55,6 +56,7 @@ export function useRecentlyClosedTabs(): TabsHookResult {
   }
 
   useEffect(() => {
+    cancelledRef.current = false;
     refresh();
     return () => {
       cancelledRef.current = true;
@@ -92,6 +94,7 @@ export function useBookmarks(): TabsHookResult {
   }
 
   useEffect(() => {
+    cancelledRef.current = false;
     refresh();
     return () => {
       cancelledRef.current = true;
