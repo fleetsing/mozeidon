@@ -389,6 +389,22 @@ test("Smart Summarize rethrows the active page fetch error when no Raycast selec
   );
 });
 
+test("Smart Summarize rethrows a falsy active page fetch error rather than masking it", async () => {
+  // A caught throw value of null/0/""/false must still be treated as a real
+  // failure, not silently ignored by a truthiness check.
+  await assert.rejects(
+    () =>
+      resolveSmartSummarizeContext({
+        getZenSelection: async () => createPermissionUnavailableSelectionContext({}),
+        getActivePageMarkdown: async () => {
+          throw null;
+        },
+        getRaycastSelectedText: async () => undefined,
+      }),
+    (error: unknown) => error === null,
+  );
+});
+
 test("Smart Summarize result titles distinguish context source", () => {
   assert.equal(getSmartSummarizeTitle("zen-selection"), "Zen Selection Summary");
   assert.equal(getSmartSummarizeTitle("raycast-selection"), "Raycast Selection Summary");

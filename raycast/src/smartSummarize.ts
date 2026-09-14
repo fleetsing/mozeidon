@@ -83,10 +83,12 @@ export async function resolveSmartSummarizeContext(
   // thrown error until after checking the Raycast selection.
   let activePageContext: ZenContext | undefined;
   let activePageFetchError: unknown;
+  let activePageFetchFailed = false;
   try {
     activePageContext = await dependencies.getActivePageMarkdown();
   } catch (error) {
     activePageFetchError = error;
+    activePageFetchFailed = true;
   }
 
   const activePageMarkdown = activePageContext ? getUsablePageMarkdownOrUndefined(activePageContext) : undefined;
@@ -109,7 +111,7 @@ export async function resolveSmartSummarizeContext(
     };
   }
 
-  if (activePageFetchError) throw activePageFetchError;
+  if (activePageFetchFailed) throw activePageFetchError;
   return {
     source: "active-page",
     text: getUsablePageMarkdown(activePageContext),

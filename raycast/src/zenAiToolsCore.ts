@@ -305,10 +305,12 @@ export async function zenGetSelectionOrPage(
     // so defer any thrown error until after checking the Raycast selection.
     let pageContext: RaycastZenContext | undefined;
     let pageFetchError: unknown;
+    let pageFetchFailed = false;
     try {
       pageContext = await dependencies.getContext(format);
     } catch (error) {
       pageFetchError = error;
+      pageFetchFailed = true;
     }
 
     const pageContentError = pageContext ? getContentUsabilityError(pageContext, format) : undefined;
@@ -346,7 +348,7 @@ export async function zenGetSelectionOrPage(
       );
     }
 
-    if (pageFetchError) throw pageFetchError;
+    if (pageFetchFailed) throw pageFetchError;
     throw pageContentError;
   });
 }
