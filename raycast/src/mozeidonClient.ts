@@ -58,8 +58,27 @@ export function buildMozeidonArgs(args: string[], options?: { profileId?: string
 }
 
 export function parseAsUrl(queryText: string): URL | undefined {
+  const explicit = tryParseUrl(queryText);
+  if (explicit) return explicit;
+
+  // A bare domain like "www.google.com" has no scheme, so new URL() above
+  // rejects it. Treat it as a direct open, not a search, when it has no
+  // whitespace and looks like a real domain (a dot in the hostname) once
+  // "https://" is assumed — matching how browser address bars behave.
+  // Reject "@" up front: new URL() parses "user@host" as userinfo, which
+  // would silently turn something like an email address into a credentialed
+  // URL open instead of a search.
+  if (/\s/.test(queryText) || queryText.includes("@")) return undefined;
+
+  const withScheme = tryParseUrl(`https://${queryText}`);
+  if (withScheme && withScheme.hostname.includes(".")) return withScheme;
+
+  return undefined;
+}
+
+function tryParseUrl(value: string): URL | undefined {
   try {
-    return new URL(queryText);
+    return new URL(value);
   } catch (_) {
     return undefined;
   }
