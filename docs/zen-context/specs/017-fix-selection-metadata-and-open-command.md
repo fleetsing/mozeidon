@@ -7,6 +7,7 @@ Fix two real bugs found while testing the AI commands and the M3 tab-list comman
 ## Status
 
 - Implemented
+- Verified end-to-end against a real Zen session, including the drive-by StrictMode cancellation fix (see below)
 
 ## Problem
 
