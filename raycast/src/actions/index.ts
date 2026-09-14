@@ -1,6 +1,15 @@
 import { runAppleScript } from "@raycast/utils";
 import { closeMainWindow, PopToRootType } from "@raycast/api";
-import type { HistoryItem, MozeidonBookmark, MozeidonGroup, MozeidonTab, Tab, TabState } from "../interfaces";
+import type {
+  HistoryItem,
+  MozeidonBookmark,
+  MozeidonGroup,
+  MozeidonTab,
+  MozeidonWindow,
+  Tab,
+  TabState,
+  WindowTarget,
+} from "../interfaces";
 import { execFileSync } from "child_process";
 import { buildBrowserOpenArgs } from "../browserOpenCommand";
 import {
@@ -14,7 +23,10 @@ import {
   TAB_TYPE,
 } from "../constants";
 import {
+  buildIncognitoArgs,
   buildNewTabArgs,
+  buildNewWindowArgs,
+  buildOpenInWindowArgs,
   MozeidonClientError,
   parseMozeidonJson,
   runMozeidon,
@@ -26,6 +38,7 @@ import {
   mapMozeidonBookmarksToTabs,
   mapMozeidonGroupsToTabGroups,
   mapMozeidonTabsToState,
+  mapWindowsToTargets,
   MozeidonTabsPayload,
 } from "../tabMappers";
 import {
@@ -44,6 +57,21 @@ import { mapMozeidonHistoryItemsToHistoryItems, MozeidonHistoryPayload } from ".
 
 export function openNewTab(queryText: string | null | undefined): void {
   runMozeidon(buildNewTabArgs(queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
+  openFirefox();
+}
+
+export function openNewTabInWindow(windowId: number, queryText: string | null | undefined): void {
+  runMozeidon(buildOpenInWindowArgs(windowId, queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
+  openFirefox();
+}
+
+export function openNewWindowTab(queryText: string | null | undefined): void {
+  runMozeidon(buildNewWindowArgs(queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
+  openFirefox();
+}
+
+export function openIncognitoTab(queryText: string | null | undefined): void {
+  runMozeidon(buildIncognitoArgs(queryText, SEARCH_ENGINES[SEARCH_ENGINE]), getMozeidonOptions());
   openFirefox();
 }
 
@@ -157,6 +185,16 @@ export function fetchTabGroups() {
     fallback: TABS_FALLBACK,
   });
   return mapMozeidonGroupsToTabGroups(parsedGroups.data) ?? [];
+}
+
+export function fetchWindowTargets(): WindowTarget[] {
+  const parsedWindows = runMozeidonJson<{ data: MozeidonWindow[] }>(["windows", "get"], {
+    ...getMozeidonOptions(),
+    context: "windows get",
+    fallback: TABS_FALLBACK,
+  });
+  const { tabs } = fetchOpenTabs();
+  return mapWindowsToTargets(parsedWindows.data, tabs);
 }
 
 export function openFirefox() {

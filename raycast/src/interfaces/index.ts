@@ -49,6 +49,17 @@ export interface MozeidonGroup {
   title?: string;
 }
 
+export interface MozeidonWindow {
+  id: number;
+  isLastFocused: boolean;
+}
+
+export interface WindowTarget {
+  id: number;
+  label: string;
+  isLastFocused: boolean;
+}
+
 export interface MozeidonBookmark {
   id: string;
   parent: string;

@@ -1,4 +1,13 @@
-import { MozeidonBookmark, MozeidonGroup, MozeidonTab, Tab, TabGroup, TabState } from "./interfaces";
+import {
+  MozeidonBookmark,
+  MozeidonGroup,
+  MozeidonTab,
+  MozeidonWindow,
+  Tab,
+  TabGroup,
+  TabState,
+  WindowTarget,
+} from "./interfaces";
 import type { TAB_TYPE } from "./constants";
 
 export type MozeidonTabsPayload = {
@@ -62,6 +71,17 @@ export function mapMozeidonGroupsToTabGroups(groups: MozeidonGroup[] | undefined
       title: group.title,
       color: group.color,
     }));
+}
+
+export function mapWindowsToTargets(windows: MozeidonWindow[], tabs: Tab[]): WindowTarget[] {
+  const targets = windows.map((window) => {
+    const activeTab = tabs.find((tab) => tab.windowId === window.id && tab.active);
+    const label = activeTab?.title || activeTab?.domain || `Window ${window.id}`;
+    return { id: window.id, label, isLastFocused: window.isLastFocused };
+  });
+
+  // Surface the window the user was just in first — the most likely target.
+  return [...targets].sort((first, second) => Number(second.isLastFocused) - Number(first.isLastFocused));
 }
 
 export function sortTabsByLastAccessed(tabs: Tab[]): Tab[] {

@@ -11,7 +11,10 @@ import {
   getRecentlyClosedTabs,
   getTabs,
   newGroupTab,
+  newIncognitoTab,
   newTab,
+  newTabInWindow,
+  newWindowTab,
   switchToTab,
   updateTabs,
 } from "./services/tabs"
@@ -34,6 +37,12 @@ export async function handler(port: Port, cmd: Command) {
       return await closeTabs(port, cmd)
     case CommandName.NEW_TAB:
       return await newTab(port, cmd)
+    case CommandName.NEW_TAB_IN_WINDOW:
+      return await newTabInWindow(port, cmd)
+    case CommandName.NEW_WINDOW_TAB:
+      return await newWindowTab(port, cmd)
+    case CommandName.NEW_INCOGNITO_TAB:
+      return await newIncognitoTab(port, cmd)
     case CommandName.DUPLICATE_TAB:
       return await duplicateTab(port, cmd)
     case CommandName.GET_BOOKMARKS:
