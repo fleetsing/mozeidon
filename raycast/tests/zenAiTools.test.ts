@@ -312,6 +312,42 @@ test("zen_get_selection_or_page falls back to active page content when no select
   }
 });
 
+test("zen_get_selection_or_page uses a Raycast selection when the active page fetch itself fails", async () => {
+  // getContext() can throw (CLI/native-app failure), not just return
+  // unusable content. A transient failure there must not block the
+  // Raycast-selection last resort when selected text is available.
+  const result = await zenGetSelectionOrPage(
+    {},
+    createDependencies({
+      zenSelection: context({}),
+      getContextError: nativeAppIpcError("context active --format markdown"),
+      raycastSelectedText: "Raycast selected text",
+    }),
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.kind, "raycast-selection");
+    assert.equal(result.data.text, "Raycast selected text");
+  }
+});
+
+test("zen_get_selection_or_page reports the active page fetch error when no Raycast selection is available either", async () => {
+  const result = await zenGetSelectionOrPage(
+    {},
+    createDependencies({
+      zenSelection: context({}),
+      getContextError: nativeAppIpcError("context active --format markdown"),
+    }),
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "mozeidon_unavailable");
+    assert.match(result.error.message, /Cannot read via ipc/);
+  }
+});
+
 test("zen_list_tabs returns focused and active tabs first with a limit", async () => {
   const result = await zenListTabs({ limit: 1 }, createDependencies({ tabs: sampleTabs() }));
 

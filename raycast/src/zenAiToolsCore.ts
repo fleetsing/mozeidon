@@ -300,11 +300,22 @@ export async function zenGetSelectionOrPage(
     // Prefer the Zen active page over an OS-level Raycast selection: while
     // Zen is showing a usable page, an unrelated selection in some other
     // app shouldn't pre-empt it. Raycast's selection is only a last resort
-    // for when Zen genuinely has nothing usable (e.g. a New Tab page).
-    const pageContext = await dependencies.getContext(format);
-    const pageContentError = getContentUsabilityError(pageContext, format);
+    // for when Zen genuinely has nothing usable (e.g. a New Tab page). A
+    // transient active-page fetch failure must not block that last resort,
+    // so defer any thrown error until after checking the Raycast selection.
+    let pageContext: RaycastZenContext | undefined;
+    let pageFetchError: unknown;
+    let pageFetchFailed = false;
+    try {
+      pageContext = await dependencies.getContext(format);
+    } catch (error) {
+      pageFetchError = error;
+      pageFetchFailed = true;
+    }
 
-    if (!pageContentError || !requireContent) {
+    const pageContentError = pageContext ? getContentUsabilityError(pageContext, format) : undefined;
+
+    if (pageContext && (!pageContentError || !requireContent)) {
       const activePageData = mapContextOutput(pageContext, format, requireContent);
       return ok(
         "zen_get_selection_or_page",
@@ -337,6 +348,7 @@ export async function zenGetSelectionOrPage(
       );
     }
 
+    if (pageFetchFailed) throw pageFetchError;
     throw pageContentError;
   });
 }
