@@ -7,6 +7,7 @@ Reorder the context fallback chain used by Smart Summarize and the `@zen` `zen_g
 ## Status
 
 - Implemented
+- Verified end-to-end against a real Zen session
 
 ## Problem
 
@@ -56,6 +57,10 @@ No changes. `getSelectedText()` usage, its permission model, and the metadata ru
 1. With Zen showing a normal page (no DOM selection there) and some unrelated text selected in another app, run Smart Summarize — confirm it summarizes the Zen page, not the unrelated text.
 2. With Zen showing a New Tab page (no usable content) and text selected in another app, run Smart Summarize — confirm it still falls back to summarizing that Raycast selection, headed "Raycast Selection Summary".
 3. Repeat both scenarios via `@zen`'s `zen_get_selection_or_page` tool and confirm the same `kind` values.
+
+## Verification Notes
+
+An initial retest looked like the reorder wasn't working — Zen selection didn't win even with text actively highlighted, and active-page reported "content unavailable" on a normal public page. Running `mozeidon context selection`/`context active` directly showed `hasHostPermission: false`, `requiresHostPermission: true` — the custom Zen/Firefox add-on (`firefox-addon/`, loaded as a temporary add-on per the README) had been dropped by a Zen Browser restart during unrelated troubleshooting earlier in the session, and Zen had fallen back to the plain AMO Mozeidon add-on, which intentionally lacks `<all_urls>` and can't extract page content or selection at all. Reloading the custom add-on via `about:debugging` fixed it immediately; this was not a bug in this spec's code. Worth remembering: **any Zen Browser restart during a debugging session silently drops this add-on**, and the resulting symptoms (selection/page content broken, but tabs/bookmarks/history still fine) can look exactly like a real regression.
 
 ## Open Questions
 
