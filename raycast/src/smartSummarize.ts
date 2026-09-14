@@ -75,6 +75,20 @@ export async function resolveSmartSummarizeContext(
     };
   }
 
+  // Prefer the Zen active page over an OS-level Raycast selection: while
+  // Zen is showing a usable page, an unrelated selection in some other app
+  // shouldn't pre-empt it. Raycast's selection is only a last resort for
+  // when Zen genuinely has nothing usable (e.g. a New Tab page).
+  const activePageContext = await dependencies.getActivePageMarkdown();
+  const activePageMarkdown = getUsablePageMarkdownOrUndefined(activePageContext);
+  if (activePageMarkdown) {
+    return {
+      source: "active-page",
+      text: activePageMarkdown,
+      ...getSourceMetadata(activePageContext),
+    };
+  }
+
   const raycastSelectedText = trimToText(await dependencies.getRaycastSelectedText());
   if (raycastSelectedText) {
     // Raycast's selected-text API reads whatever is highlighted in the
@@ -86,12 +100,9 @@ export async function resolveSmartSummarizeContext(
     };
   }
 
-  const activePageContext = await dependencies.getActivePageMarkdown();
-  const markdown = getUsablePageMarkdown(activePageContext);
-
   return {
     source: "active-page",
-    text: markdown,
+    text: getUsablePageMarkdown(activePageContext),
     ...getSourceMetadata(activePageContext),
   };
 }
@@ -208,7 +219,7 @@ function getZenDomSelectionText(context: ZenContext | undefined): string | undef
   return undefined;
 }
 
-function getUsablePageMarkdown(context: ZenContext | undefined): string {
+function getUsablePageMarkdownOrUndefined(context: ZenContext | undefined): string | undefined {
   const markdown = getContentValue(context?.content?.markdown);
   const contentUsability = classifyZenContextContent(context);
   if (
@@ -219,6 +230,15 @@ function getUsablePageMarkdown(context: ZenContext | undefined): string {
     contentUsability === "unavailable" ||
     contentUsability === "error"
   ) {
+    return undefined;
+  }
+
+  return markdown;
+}
+
+function getUsablePageMarkdown(context: ZenContext | undefined): string {
+  const markdown = getUsablePageMarkdownOrUndefined(context);
+  if (!markdown) {
     throw new SmartSummarizeError(
       "content_unavailable",
       "Active page content is unavailable. Check Zen context permissions or page support.",

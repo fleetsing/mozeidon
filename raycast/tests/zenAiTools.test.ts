@@ -200,7 +200,9 @@ test("zen_get_selection_or_page prefers Zen DOM selection", async () => {
   }
 });
 
-test("zen_get_selection_or_page falls back to Raycast selection when Zen selection throws permission unavailable", async () => {
+test("zen_get_selection_or_page prefers active page content over a Raycast selection when Zen has a usable page", async () => {
+  // While Zen has a usable page open, an unrelated selection in some other
+  // app shouldn't pre-empt it — Raycast's selection is a last resort only.
   const result = await zenGetSelectionOrPage(
     {},
     createDependencies({
@@ -208,6 +210,28 @@ test("zen_get_selection_or_page falls back to Raycast selection when Zen selecti
         code: "permission_unavailable",
       }),
       raycastSelectedText: "Raycast selected text",
+      contexts: {
+        markdown: context({ title: "Page", url: "https://example.com/page", markdown: "Page markdown" }),
+      },
+    }),
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.kind, "active-page");
+    assert.equal(result.data.markdown, "Page markdown");
+  }
+});
+
+test("zen_get_selection_or_page falls back to Raycast selection only when Zen selection and active page are both unusable", async () => {
+  const result = await zenGetSelectionOrPage(
+    {},
+    createDependencies({
+      getZenSelectionError: Object.assign(new Error("Selection permission is unavailable."), {
+        code: "permission_unavailable",
+      }),
+      raycastSelectedText: "Raycast selected text",
+      contexts: { markdown: context({}) },
     }),
   );
 
@@ -222,7 +246,8 @@ test("zen_get_selection_or_page falls back to Raycast selection when Zen selecti
 test("zen_get_selection_or_page does not attach Zen page metadata to a Raycast selection", async () => {
   // getRaycastSelectedText() reads whatever is highlighted in the frontmost
   // app, not scoped to Zen, so the Zen page's title/URL must not be
-  // attached to text that may have nothing to do with it.
+  // attached to text that may have nothing to do with it. Active page is
+  // unusable here so the raycast-selection last resort is actually reached.
   const result = await zenGetSelectionOrPage(
     {},
     createDependencies({
@@ -231,6 +256,7 @@ test("zen_get_selection_or_page does not attach Zen page metadata to a Raycast s
         url: "https://example.com/article",
       }),
       raycastSelectedText: "Raycast selected text",
+      contexts: { markdown: context({}) },
     }),
   );
 
@@ -242,11 +268,12 @@ test("zen_get_selection_or_page does not attach Zen page metadata to a Raycast s
   }
 });
 
-test("zen_get_selection_or_page does not fetch active page context for a Raycast selection", async () => {
+test("zen_get_selection_or_page fetches active page context before falling back to a Raycast selection", async () => {
   const calls: string[] = [];
   const dependencies = createDependencies({
     zenSelection: context({}),
     raycastSelectedText: "Raycast selected text",
+    contexts: { markdown: context({}) },
   });
   const result = await zenGetSelectionOrPage(
     {},
@@ -264,7 +291,7 @@ test("zen_get_selection_or_page does not fetch active page context for a Raycast
     assert.equal(result.data.kind, "raycast-selection");
     assert.deepEqual(result.data.source, {});
   }
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ["active-page"]);
 });
 
 test("zen_get_selection_or_page falls back to active page content when no selection exists", async () => {

@@ -66,7 +66,9 @@ test("Smart Summarize uses Zen user-selection payloads from the add-on", async (
   });
 });
 
-test("Smart Summarize falls back to Raycast selected text when Zen selection is permission-unavailable", async () => {
+test("Smart Summarize prefers active page content over Raycast selected text when Zen selection is unavailable", async () => {
+  // While Zen has a usable page open, an unrelated selection in some other
+  // app shouldn't pre-empt it — Raycast's selection is a last resort only.
   const calls: string[] = [];
   const context = await resolveSmartSummarizeContext({
     getZenSelection: async () => {
@@ -82,11 +84,43 @@ test("Smart Summarize falls back to Raycast selected text when Zen selection is 
     },
     getActivePageMarkdown: async () => {
       calls.push("active-page");
-      return createActivePageContext("Full page markdown");
+      return createActivePageContext("Full page markdown", {
+        title: "Active Source",
+        url: "https://example.com/active",
+      });
     },
   });
 
-  assert.deepEqual(calls, ["zen-selection", "raycast-selection"]);
+  assert.deepEqual(calls, ["zen-selection", "active-page"]);
+  assert.deepEqual(context, {
+    source: "active-page",
+    text: "Full page markdown",
+    title: "Active Source",
+    url: "https://example.com/active",
+  });
+});
+
+test("Smart Summarize falls back to Raycast selected text only when Zen selection and active page are both unusable", async () => {
+  const calls: string[] = [];
+  const context = await resolveSmartSummarizeContext({
+    getZenSelection: async () => {
+      calls.push("zen-selection");
+      return createPermissionUnavailableSelectionContext({
+        title: "Permissioned Article",
+        url: "https://example.com/permissioned",
+      });
+    },
+    getRaycastSelectedText: async () => {
+      calls.push("raycast-selection");
+      return "Raycast selected fallback";
+    },
+    getActivePageMarkdown: async () => {
+      calls.push("active-page");
+      return undefined;
+    },
+  });
+
+  assert.deepEqual(calls, ["zen-selection", "active-page", "raycast-selection"]);
   assert.deepEqual(context, {
     source: "raycast-selection",
     text: "Raycast selected fallback",
@@ -96,7 +130,8 @@ test("Smart Summarize falls back to Raycast selected text when Zen selection is 
 test("Smart Summarize does not attach Zen page metadata to Raycast selected text", async () => {
   // getSelectedText() reads whatever is highlighted in the frontmost app,
   // not scoped to Zen, so the Zen page's title/URL must not be attached to
-  // text that may have nothing to do with it.
+  // text that may have nothing to do with it. Active page is unusable here
+  // so the raycast-selection last resort is actually reached.
   const context = await resolveSmartSummarizeContext(
     createDependencies({
       zenSelection: createPermissionUnavailableSelectionContext({
@@ -104,7 +139,7 @@ test("Smart Summarize does not attach Zen page metadata to Raycast selected text
         url: "https://example.com/source",
       }),
       raycastSelectedText: "Selected outside DOM grant",
-      activePage: createActivePageContext("Full page markdown"),
+      activePage: undefined,
     }),
   );
 
@@ -114,46 +149,39 @@ test("Smart Summarize does not attach Zen page metadata to Raycast selected text
   assert.equal(context.url, undefined);
 });
 
-test("Smart Summarize does not fetch active page markdown when Raycast selected text is used", async () => {
+test("Smart Summarize fetches active page markdown before falling back to Raycast selected text", async () => {
   const calls: string[] = [];
   const context = await resolveSmartSummarizeContext({
     getZenSelection: async () => {
       calls.push("zen-selection");
       return createPermissionUnavailableSelectionContext({});
     },
+    getActivePageMarkdown: async () => {
+      calls.push("active-page");
+      return undefined;
+    },
     getRaycastSelectedText: async () => {
       calls.push("raycast-selection");
       return "Selected outside DOM grant";
     },
-    getActivePageMarkdown: async () => {
-      calls.push("active-page");
-      return createActivePageContext("Full page markdown", {
-        title: "Active Source",
-        url: "https://example.com/active",
-      });
-    },
   });
 
-  assert.deepEqual(calls, ["zen-selection", "raycast-selection"]);
+  assert.deepEqual(calls, ["zen-selection", "active-page", "raycast-selection"]);
   assert.deepEqual(context, {
     source: "raycast-selection",
     text: "Selected outside DOM grant",
   });
 });
 
-test("Smart Summarize falls back to Raycast selected text when Zen selection throws permission unavailable", async () => {
+test("Smart Summarize falls back to Raycast selected text when Zen selection throws permission unavailable and active page is unusable", async () => {
   const context = await resolveSmartSummarizeContext({
     getZenSelection: async () => {
       throw Object.assign(new Error("Selection permission is unavailable."), {
         code: "permission_unavailable",
       });
     },
+    getActivePageMarkdown: async () => undefined,
     getRaycastSelectedText: async () => "Raycast selected fallback",
-    getActivePageMarkdown: async () =>
-      createActivePageContext("Full page markdown", {
-        title: "Active Source",
-        url: "https://example.com/active",
-      }),
   });
 
   assert.deepEqual(context, {

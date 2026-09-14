@@ -297,6 +297,28 @@ export async function zenGetSelectionOrPage(
       );
     }
 
+    // Prefer the Zen active page over an OS-level Raycast selection: while
+    // Zen is showing a usable page, an unrelated selection in some other
+    // app shouldn't pre-empt it. Raycast's selection is only a last resort
+    // for when Zen genuinely has nothing usable (e.g. a New Tab page).
+    const pageContext = await dependencies.getContext(format);
+    const pageContentError = getContentUsabilityError(pageContext, format);
+
+    if (!pageContentError || !requireContent) {
+      const activePageData = mapContextOutput(pageContext, format, requireContent);
+      return ok(
+        "zen_get_selection_or_page",
+        {
+          source: activePageData.source,
+          kind: "active-page",
+          format,
+          text: activePageData.text,
+          markdown: activePageData.markdown,
+        },
+        pageContext.warnings,
+      );
+    }
+
     const raycastSelection = trimToText(await dependencies.getRaycastSelectedText());
     if (raycastSelection) {
       // Raycast's selected-text API reads whatever is highlighted in the
@@ -315,19 +337,7 @@ export async function zenGetSelectionOrPage(
       );
     }
 
-    const pageContext = await dependencies.getContext(format);
-    const activePageData = mapContextOutput(pageContext, format, requireContent);
-    return ok(
-      "zen_get_selection_or_page",
-      {
-        source: activePageData.source,
-        kind: "active-page",
-        format,
-        text: activePageData.text,
-        markdown: activePageData.markdown,
-      },
-      pageContext.warnings,
-    );
+    throw pageContentError;
   });
 }
 
@@ -844,6 +854,19 @@ function mapContextOutput(
     text: format === "text" ? getContentValue(context.raw.content?.text) ?? context.markdown : undefined,
     context: format === "json" ? context.raw : undefined,
   };
+}
+
+function getContentUsabilityError(
+  context: RaycastZenContext,
+  format: "markdown" | "text" | "json",
+): ZenToolError | undefined {
+  try {
+    requireRealContentContext(context, format);
+    return undefined;
+  } catch (error) {
+    if (error instanceof ZenToolError) return error;
+    throw error;
+  }
 }
 
 function requireRealContentContext(context: RaycastZenContext, format: "markdown" | "text" | "json"): void {
