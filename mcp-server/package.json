@@ -1,0 +1,24 @@
+{
+  "name": "zen-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only MCP server wrapping the Zen context API (see docs/zen-context/specs/020-mcp-read-only-server.md)",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^5.9.3"
+  }
+}
