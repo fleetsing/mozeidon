@@ -58,6 +58,12 @@ No changes. `getSelectedText()` usage, its permission model, and the metadata ru
 2. With Zen showing a New Tab page (no usable content) and text selected in another app, run Smart Summarize — confirm it still falls back to summarizing that Raycast selection, headed "Raycast Selection Summary".
 3. Repeat both scenarios via `@zen`'s `zen_get_selection_or_page` tool and confirm the same `kind` values.
 
+## Follow-Up Fix: Deferred Active-Page Fetch Errors
+
+Post-merge Copilot review correctly flagged that `getActivePageMarkdown()`/`dependencies.getContext()` don't just return unusable content sometimes — they can outright throw (CLI failure, native-app IPC error, unsupported-CLI error). In the original ordering, that fetch was the last step, so a throw there only ever mattered when nothing else was available. With the reorder, that fetch now happens much earlier, so a transient failure there would produce a hard error even when a perfectly good Raycast selection was available as a fallback — a real robustness regression versus the pre-Spec-018 behavior.
+
+Fixed in both `resolveSmartSummarizeContext` and `zenGetSelectionOrPage` by wrapping the active-page fetch in its own try/catch and deferring any thrown error: the Raycast-selection last resort is still attempted before the deferred error is rethrown (only when no Raycast selection is available either, restoring the exact prior error). Added 4 tests (2 per call site) covering both branches.
+
 ## Verification Notes
 
 An initial retest looked like the reorder wasn't working — Zen selection didn't win even with text actively highlighted, and active-page reported "content unavailable" on a normal public page. Running `mozeidon context selection`/`context active` directly showed `hasHostPermission: false`, `requiresHostPermission: true` — the custom Zen/Firefox add-on (`firefox-addon/`, loaded as a temporary add-on per the README) had been dropped by a Zen Browser restart during unrelated troubleshooting earlier in the session, and Zen had fallen back to the plain AMO Mozeidon add-on, which intentionally lacks `<all_urls>` and can't extract page content or selection at all. Reloading the custom add-on via `about:debugging` fixed it immediately; this was not a bug in this spec's code. Worth remembering: **any Zen Browser restart during a debugging session silently drops this add-on**, and the resulting symptoms (selection/page content broken, but tabs/bookmarks/history still fine) can look exactly like a real regression.

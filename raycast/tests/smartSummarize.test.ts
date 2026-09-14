@@ -357,6 +357,38 @@ test("Smart Summarize reports native app IPC failures clearly", async () => {
   }
 });
 
+test("Smart Summarize uses Raycast selected text when the active page fetch itself fails", async () => {
+  // getActivePageMarkdown() can throw (CLI/native-app failure), not just
+  // return unusable content. A transient failure there must not block the
+  // Raycast-selection last resort when selected text is available.
+  const context = await resolveSmartSummarizeContext({
+    getZenSelection: async () => createPermissionUnavailableSelectionContext({}),
+    getActivePageMarkdown: async () => {
+      throw nativeAppIpcError("context active --format markdown");
+    },
+    getRaycastSelectedText: async () => "Raycast selected fallback",
+  });
+
+  assert.deepEqual(context, {
+    source: "raycast-selection",
+    text: "Raycast selected fallback",
+  });
+});
+
+test("Smart Summarize rethrows the active page fetch error when no Raycast selection is available either", async () => {
+  await assert.rejects(
+    () =>
+      resolveSmartSummarizeContext({
+        getZenSelection: async () => createPermissionUnavailableSelectionContext({}),
+        getActivePageMarkdown: async () => {
+          throw nativeAppIpcError("context active --format markdown");
+        },
+        getRaycastSelectedText: async () => undefined,
+      }),
+    (error: unknown) => error instanceof MozeidonClientError && error.code === "command_failed",
+  );
+});
+
 test("Smart Summarize result titles distinguish context source", () => {
   assert.equal(getSmartSummarizeTitle("zen-selection"), "Zen Selection Summary");
   assert.equal(getSmartSummarizeTitle("raycast-selection"), "Raycast Selection Summary");

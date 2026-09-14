@@ -78,9 +78,18 @@ export async function resolveSmartSummarizeContext(
   // Prefer the Zen active page over an OS-level Raycast selection: while
   // Zen is showing a usable page, an unrelated selection in some other app
   // shouldn't pre-empt it. Raycast's selection is only a last resort for
-  // when Zen genuinely has nothing usable (e.g. a New Tab page).
-  const activePageContext = await dependencies.getActivePageMarkdown();
-  const activePageMarkdown = getUsablePageMarkdownOrUndefined(activePageContext);
+  // when Zen genuinely has nothing usable (e.g. a New Tab page). A transient
+  // active-page fetch failure must not block that last resort, so defer any
+  // thrown error until after checking the Raycast selection.
+  let activePageContext: ZenContext | undefined;
+  let activePageFetchError: unknown;
+  try {
+    activePageContext = await dependencies.getActivePageMarkdown();
+  } catch (error) {
+    activePageFetchError = error;
+  }
+
+  const activePageMarkdown = activePageContext ? getUsablePageMarkdownOrUndefined(activePageContext) : undefined;
   if (activePageMarkdown) {
     return {
       source: "active-page",
@@ -100,6 +109,7 @@ export async function resolveSmartSummarizeContext(
     };
   }
 
+  if (activePageFetchError) throw activePageFetchError;
   return {
     source: "active-page",
     text: getUsablePageMarkdown(activePageContext),
