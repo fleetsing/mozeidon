@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Action,
   ActionPanel,
@@ -16,10 +17,14 @@ import {
   createBookmark,
   deleteBookmark,
   duplicateTab,
+  fetchWindowTargets,
   moveTabToEnd,
   moveTabToGroup,
   moveTabToStart,
+  openIncognitoTab,
   openNewTab,
+  openNewTabInWindow,
+  openNewWindowTab,
   pinTab,
   switchTab,
   ungroupTab,
@@ -27,7 +32,7 @@ import {
   updateBookmark,
 } from "../actions";
 import { TAB_TYPE } from "../constants";
-import { Tab, TabGroup } from "../interfaces";
+import { Tab, TabGroup, WindowTarget } from "../interfaces";
 import { getAvailableBookmarkActionIds, validateBookmarkFolderPath } from "../bookmarkCommands";
 import {
   formatTabGroupTitle,
@@ -42,9 +47,47 @@ export class TabActions {
 }
 
 function NewTabAction({ query }: { query?: string }) {
+  const [windowTargets, setWindowTargets] = useState<WindowTarget[]>();
+  const [isLoadingWindows, setIsLoadingWindows] = useState(false);
+
+  async function loadWindowTargets() {
+    // Always refetch on open (windows can change between opens) rather than
+    // caching forever - an empty array from a prior failure is truthy, so
+    // caching it would have permanently blocked retrying.
+    if (isLoadingWindows) return;
+    setIsLoadingWindows(true);
+    // Yield once so the loading spinner actually renders before the
+    // blocking execFileSync-based fetch runs synchronously below.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+      setWindowTargets(fetchWindowTargets());
+    } catch (error) {
+      await showToast({
+        title: "Failed to Load Windows",
+        message: error instanceof Error ? error.message : undefined,
+        style: Toast.Style.Failure,
+      });
+      setWindowTargets(undefined);
+    } finally {
+      setIsLoadingWindows(false);
+    }
+  }
+
   return (
     <ActionPanel title="New Tab">
       <OpenNewTabAction query={query || ""} />
+      <OpenInNewWindowAction query={query || ""} />
+      <OpenInIncognitoWindowAction query={query || ""} />
+      <ActionPanel.Submenu
+        title="Open in Window"
+        icon={{ source: Icon.AppWindow }}
+        isLoading={isLoadingWindows}
+        onOpen={loadWindowTargets}
+      >
+        {(windowTargets ?? []).map((target) => (
+          <OpenInWindowAction key={target.id} query={query || ""} target={target} />
+        ))}
+      </ActionPanel.Submenu>
     </ActionPanel>
   );
 }
@@ -334,6 +377,49 @@ function OpenNewTabAction(props: { query: string }) {
     await closeMainWindow({ clearRootSearch: true, popToRootType: PopToRootType.Immediate });
   }
   return <Action onAction={handleAction} title={props.query ? `Search "${props.query}"` : "Open Empty Tab"} />;
+}
+
+async function handleOpenTabTarget(action: () => void, failureTitle: string) {
+  try {
+    action();
+    await closeMainWindow({ clearRootSearch: true, popToRootType: PopToRootType.Immediate });
+  } catch (error) {
+    await showToast({
+      title: failureTitle,
+      message: error instanceof Error ? error.message : undefined,
+      style: Toast.Style.Failure,
+    });
+  }
+}
+
+function OpenInNewWindowAction(props: { query: string }) {
+  return (
+    <Action
+      title="Open in New Window"
+      icon={{ source: Icon.AppWindow }}
+      onAction={() => handleOpenTabTarget(() => openNewWindowTab(props.query), "Failed to Open New Window")}
+    />
+  );
+}
+
+function OpenInIncognitoWindowAction(props: { query: string }) {
+  return (
+    <Action
+      title="Open in New Incognito Window"
+      icon={{ source: Icon.Glasses }}
+      onAction={() => handleOpenTabTarget(() => openIncognitoTab(props.query), "Failed to Open Incognito Window")}
+    />
+  );
+}
+
+function OpenInWindowAction(props: { query: string; target: WindowTarget }) {
+  return (
+    <Action
+      title={props.target.label}
+      icon={{ source: props.target.isLastFocused ? Icon.CheckCircle : Icon.AppWindow }}
+      onAction={() => handleOpenTabTarget(() => openNewTabInWindow(props.target.id, props.query), "Failed to Open Tab")}
+    />
+  );
 }
 
 type BookmarkFormValues = {

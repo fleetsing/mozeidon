@@ -251,12 +251,22 @@ Open a new tab.
 
 **Usage:**
 ```bash
-mozeidon tabs new [url|keywords...]
+mozeidon tabs new [url|keywords...] [flags]
 ```
 
 **Arguments:**
 - `url` - A URL to open
 - `keywords...` - Space-separated search keywords
+
+**Optional Flags:**
+- `-w, --window-id <id>` - Open the tab in this existing window (default: `-1`)
+- `--new-window` - Open the tab in a brand-new window
+- `--incognito` - Open the tab in a brand-new incognito window
+
+**Mutually Exclusive:**
+- `--window-id`, `--new-window`, and `--incognito`
+
+With none of these flags set, the tab opens in the current window.
 
 **Examples:**
 ```bash
@@ -265,6 +275,15 @@ mozeidon tabs new https://mozilla.org
 
 # Search with keywords
 mozeidon tabs new what is mozeidon add-on extension
+
+# Open a URL in an existing window
+mozeidon tabs new https://mozilla.org --window-id 3
+
+# Open a URL in a brand-new window
+mozeidon tabs new https://mozilla.org --new-window
+
+# Open a URL in a brand-new incognito window
+mozeidon tabs new https://mozilla.org --incognito
 ```
 
 ---

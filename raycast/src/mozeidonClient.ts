@@ -84,12 +84,32 @@ function tryParseUrl(value: string): URL | undefined {
   }
 }
 
-export function buildNewTabArgs(queryText: string | null | undefined, searchEngineBaseUrl: string): string[] {
-  if (!queryText) return ["tabs", "new"];
+export function buildNewTabQueryArgs(queryText: string | null | undefined, searchEngineBaseUrl: string): string[] {
+  if (!queryText) return [];
 
   const url = parseAsUrl(queryText);
-  if (url) return ["tabs", "new", "--", url.toString()];
-  return ["tabs", "new", "--", `${searchEngineBaseUrl}${encodeURIComponent(queryText)}`];
+  if (url) return ["--", url.toString()];
+  return ["--", `${searchEngineBaseUrl}${encodeURIComponent(queryText)}`];
+}
+
+export function buildNewTabArgs(queryText: string | null | undefined, searchEngineBaseUrl: string): string[] {
+  return ["tabs", "new", ...buildNewTabQueryArgs(queryText, searchEngineBaseUrl)];
+}
+
+export function buildOpenInWindowArgs(
+  windowId: number,
+  queryText: string | null | undefined,
+  searchEngineBaseUrl: string,
+): string[] {
+  return ["tabs", "new", "--window-id", String(windowId), ...buildNewTabQueryArgs(queryText, searchEngineBaseUrl)];
+}
+
+export function buildNewWindowArgs(queryText: string | null | undefined, searchEngineBaseUrl: string): string[] {
+  return ["tabs", "new", "--new-window", ...buildNewTabQueryArgs(queryText, searchEngineBaseUrl)];
+}
+
+export function buildIncognitoArgs(queryText: string | null | undefined, searchEngineBaseUrl: string): string[] {
+  return ["tabs", "new", "--incognito", ...buildNewTabQueryArgs(queryText, searchEngineBaseUrl)];
 }
 
 export function runMozeidon(args: string[], options: MozeidonRunOptions): string | Buffer {

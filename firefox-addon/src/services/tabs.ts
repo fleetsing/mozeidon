@@ -49,24 +49,68 @@ export async function newGroupTab(port: Port, { args }: Command) {
   }
 }
 
+// Resolves new-tab args to a URL to open, or undefined for an empty tab.
+// Falls back to a Google search when args isn't itself a valid URL.
+function resolveTabUrl(args: string | undefined): string | undefined {
+  if (!args) return undefined
+  try {
+    return new URL(args).toString()
+  } catch (_) {
+    return `https://www.google.com/search?q=${encodeURIComponent(args)}`
+  }
+}
+
 export async function newTab(port: Port, { args }: Command) {
   try {
+    const url = resolveTabUrl(args)
+    log(url ? `open tab at url: ${url}` : "open empty tab")
+    await browser.tabs.create(url ? { url } : {})
+    return port.postMessage(Response.end())
+  } catch (e) {
+    return handleError(e, port)
+  }
+}
+
+export async function newTabInWindow(port: Port, { args }: Command) {
+  try {
     if (!args) {
-      log("open empty tab")
-      await browser.tabs.create({})
+      log("missing args in new-tab-in-window")
       return port.postMessage(Response.end())
     }
-
-    try {
-      const url = new URL(args)
-      log("open tab at url: ", url)
-      await browser.tabs.create({ url: url.toString() })
-    } catch (_) {
-      // if not an url, use google
-      const url = `https://www.google.com/search?q=${encodeURIComponent(args)}`
-      log("open google tab")
-      await browser.tabs.create({ url })
+    // Take everything up to the first colon as the window id and everything
+    // after as the query, rather than a full colon split - the query may
+    // itself be a URL containing colons (e.g. "https://host:port/...").
+    const firstColon = args.indexOf(":")
+    if (firstColon === -1) {
+      log("missing window id in new-tab-in-window")
+      return port.postMessage(Response.end())
     }
+    const windowId = Number(args.slice(0, firstColon))
+    const url = resolveTabUrl(args.slice(firstColon + 1))
+    log(`open tab in window ${windowId}` + (url ? ` at url: ${url}` : ""))
+    await browser.tabs.create(url ? { windowId, url } : { windowId })
+    return port.postMessage(Response.end())
+  } catch (e) {
+    return handleError(e, port)
+  }
+}
+
+export async function newWindowTab(port: Port, { args }: Command) {
+  try {
+    const url = resolveTabUrl(args)
+    log(url ? `open new window at url: ${url}` : "open new empty window")
+    await browser.windows.create(url ? { url } : {})
+    return port.postMessage(Response.end())
+  } catch (e) {
+    return handleError(e, port)
+  }
+}
+
+export async function newIncognitoTab(port: Port, { args }: Command) {
+  try {
+    const url = resolveTabUrl(args)
+    log(url ? `open new incognito window at url: ${url}` : "open new empty incognito window")
+    await browser.windows.create(url ? { url, incognito: true } : { incognito: true })
     return port.postMessage(Response.end())
   } catch (e) {
     return handleError(e, port)

@@ -15,8 +15,12 @@ import { buildDeleteHistoryItemArgs } from "../src/historyCommands";
 import { mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
 import {
   MozeidonClientError,
+  buildIncognitoArgs,
   buildMozeidonArgs,
   buildNewTabArgs,
+  buildNewTabQueryArgs,
+  buildNewWindowArgs,
+  buildOpenInWindowArgs,
   parseAsUrl,
   parseMozeidonJson,
   runMozeidon,
@@ -39,6 +43,7 @@ import {
   hasGroupMetadata,
   mapMozeidonBookmarksToTabs,
   mapMozeidonTabsToState,
+  mapWindowsToTargets,
   sortTabsByLastAccessed,
 } from "../src/tabMappers";
 import { buildTabKeywords, buildTabMetadata, getDistinctWindowCount } from "../src/tabMetadata";
@@ -477,6 +482,58 @@ test("buildNewTabArgs opens a bare domain directly instead of searching for it",
     "--",
     "https://www.google.com/",
   ]);
+});
+
+test("buildNewTabQueryArgs is the shared query-resolution tail reused by every new-tab builder", () => {
+  assert.deepEqual(buildNewTabQueryArgs(undefined, "https://google.com/search?q="), []);
+  assert.deepEqual(buildNewTabQueryArgs("", "https://google.com/search?q="), []);
+  assert.deepEqual(buildNewTabQueryArgs("https://example.com/page", "https://google.com/search?q="), [
+    "--",
+    "https://example.com/page",
+  ]);
+  assert.deepEqual(buildNewTabQueryArgs("hello zen", "https://google.com/search?q="), [
+    "--",
+    "https://google.com/search?q=hello%20zen",
+  ]);
+});
+
+test("buildOpenInWindowArgs targets a specific existing window", () => {
+  assert.deepEqual(buildOpenInWindowArgs(3, "https://example.com/page", "https://google.com/search?q="), [
+    "tabs",
+    "new",
+    "--window-id",
+    "3",
+    "--",
+    "https://example.com/page",
+  ]);
+  assert.deepEqual(buildOpenInWindowArgs(3, undefined, "https://google.com/search?q="), [
+    "tabs",
+    "new",
+    "--window-id",
+    "3",
+  ]);
+});
+
+test("buildNewWindowArgs opens a brand-new window", () => {
+  assert.deepEqual(buildNewWindowArgs("hello zen", "https://google.com/search?q="), [
+    "tabs",
+    "new",
+    "--new-window",
+    "--",
+    "https://google.com/search?q=hello%20zen",
+  ]);
+  assert.deepEqual(buildNewWindowArgs(undefined, "https://google.com/search?q="), ["tabs", "new", "--new-window"]);
+});
+
+test("buildIncognitoArgs opens a brand-new incognito window", () => {
+  assert.deepEqual(buildIncognitoArgs("https://example.com/page", "https://google.com/search?q="), [
+    "tabs",
+    "new",
+    "--incognito",
+    "--",
+    "https://example.com/page",
+  ]);
+  assert.deepEqual(buildIncognitoArgs(undefined, "https://google.com/search?q="), ["tabs", "new", "--incognito"]);
 });
 
 test("user input is passed as child process args without shell interpolation", () => {
@@ -999,6 +1056,30 @@ test("mapMozeidonBookmarksToTabs preserves current bookmark mapping behavior", (
   assert.equal(tabs[0].url, "https://example.com");
   assert.equal(tabs[0].domain, "Bookmarks Toolbar");
   assert.equal(tabs[0].active, false);
+});
+
+test("mapWindowsToTargets labels a window with its active tab and surfaces the last-focused window first", () => {
+  const tabs = [
+    new Tab("1", false, 10, "GitHub PR", "https://github.com/pr/1", "github.com", false),
+    new Tab("2", false, 10, "Active in Window 10", "https://example.com", "example.com", true),
+    new Tab("3", false, 20, "Active in Window 20", "https://other.com", "other.com", true),
+  ];
+  const windows = [
+    { id: 10, isLastFocused: false },
+    { id: 20, isLastFocused: true },
+  ];
+
+  const targets = mapWindowsToTargets(windows, tabs);
+
+  assert.deepEqual(targets, [
+    { id: 20, label: "Active in Window 20", isLastFocused: true },
+    { id: 10, label: "Active in Window 10", isLastFocused: false },
+  ]);
+});
+
+test("mapWindowsToTargets falls back to a generic label when a window has no active tab", () => {
+  const targets = mapWindowsToTargets([{ id: 7, isLastFocused: false }], []);
+  assert.deepEqual(targets, [{ id: 7, label: "Window 7", isLastFocused: false }]);
 });
 
 function createFakeProcess(): ChildProcessWithoutNullStreams {
