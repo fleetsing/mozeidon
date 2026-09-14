@@ -51,8 +51,14 @@ function NewTabAction({ query }: { query?: string }) {
   const [isLoadingWindows, setIsLoadingWindows] = useState(false);
 
   async function loadWindowTargets() {
-    if (windowTargets || isLoadingWindows) return;
+    // Always refetch on open (windows can change between opens) rather than
+    // caching forever - an empty array from a prior failure is truthy, so
+    // caching it would have permanently blocked retrying.
+    if (isLoadingWindows) return;
     setIsLoadingWindows(true);
+    // Yield once so the loading spinner actually renders before the
+    // blocking execFileSync-based fetch runs synchronously below.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     try {
       setWindowTargets(fetchWindowTargets());
     } catch (error) {
@@ -61,7 +67,7 @@ function NewTabAction({ query }: { query?: string }) {
         message: error instanceof Error ? error.message : undefined,
         style: Toast.Style.Failure,
       });
-      setWindowTargets([]);
+      setWindowTargets(undefined);
     } finally {
       setIsLoadingWindows(false);
     }
