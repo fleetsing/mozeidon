@@ -433,7 +433,18 @@ test("buildLastTabIndexByWindow precomputes reliable last indexes by window", ()
 test("parseAsUrl distinguishes valid URLs from plain search text", () => {
   assert.equal(parseAsUrl("https://example.com/page")?.toString(), "https://example.com/page");
   assert.equal(parseAsUrl("hello zen"), undefined);
-  assert.equal(parseAsUrl("www.google.com"), undefined);
+});
+
+test("parseAsUrl treats a bare domain with no scheme as a direct URL", () => {
+  // Matches browser address-bar behavior: a single dotted word with no
+  // whitespace is a domain to open, not a search query.
+  assert.equal(parseAsUrl("www.google.com")?.toString(), "https://www.google.com/");
+  assert.equal(parseAsUrl("github.com")?.toString(), "https://github.com/");
+});
+
+test("parseAsUrl does not treat plain words or multi-word phrases as URLs", () => {
+  assert.equal(parseAsUrl("zen"), undefined);
+  assert.equal(parseAsUrl("node.js tutorial"), undefined);
 });
 
 test("buildNewTabArgs handles empty, URL, and search queries", () => {
@@ -450,6 +461,15 @@ test("buildNewTabArgs handles empty, URL, and search queries", () => {
     "new",
     "--",
     "https://google.com/search?q=hello%20zen",
+  ]);
+});
+
+test("buildNewTabArgs opens a bare domain directly instead of searching for it", () => {
+  assert.deepEqual(buildNewTabArgs("www.google.com", "https://google.com/search?q="), [
+    "tabs",
+    "new",
+    "--",
+    "https://www.google.com/",
   ]);
 });
 
