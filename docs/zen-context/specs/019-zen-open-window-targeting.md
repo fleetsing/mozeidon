@@ -7,6 +7,7 @@ Extend "Zen Open" (spec 017) with window-targeting: open the new tab in a brand-
 ## Status
 
 - Implemented
+- Verified end-to-end against a real Zen session, including the incognito permission gate behaving as designed (clear failure toast when ungranted, works once granted)
 
 ## Problem
 
