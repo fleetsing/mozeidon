@@ -96,19 +96,19 @@ Validation:
 
 ## Milestone 5: Optional MCP Wrapper
 
-Status: not started.
+Status: read-only pass implemented and manually verified (Spec 020, `mcp-server/`).
 
 Purpose: expose stable Zen context to MCP clients after the context API settles.
 
 Candidate work:
 
-- Thin wrapper over context API.
-- Read-only tools first.
-- Mutating tools require explicit confirmation semantics.
+- Thin wrapper over context API. Implemented as a new standalone `mcp-server/` package (`zen-mcp-server`), duplicating the portable core logic from `raycast/src/` rather than sharing it via a workspace (accepted tradeoff, see Spec 020).
+- Read-only tools first. Implemented: `zen_get_active_context`, `zen_get_selection_or_page`, `zen_list_tabs`, `zen_search_tabs`, `zen_get_tab_content`.
+- Mutating tools require explicit confirmation semantics. Not started — `zen_open_or_focus_url` is deliberately not exposed yet; needs its own spec once there's a concrete need and a designed MCP confirmation mechanism.
 
 Validation:
 
-- MCP schema checks.
+- MCP schema checks: covered by unit tests plus live verification of the actual stdio protocol (`initialize`/`tools/list`/`tools/call`) against a real Zen session, including a strict-schema rejection of an unrecognized input field.
 - Contract fixtures.
 
 ## Milestone 6: Site Adapters And Local Browsing Memory

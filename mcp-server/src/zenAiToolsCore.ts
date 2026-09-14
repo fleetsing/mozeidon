@@ -1,0 +1,1154 @@
+// Copied from raycast/src/zenAiToolsCore.ts (see docs/zen-context/specs/020-mcp-read-only-server.md).
+// Only changes from the Raycast source: relative import specifiers use
+// explicit .js extensions (this package's NodeNext ESM resolution requires
+// it), and `./interfaces` is this package's own minimal MozeidonTab-only
+// slice rather than Raycast's full (React-dependent) interfaces module.
+import type { MozeidonTab } from "./interfaces.js";
+import {
+  classifyZenContextContent,
+  getContentValue,
+  isRecoverableSelectionCode,
+  requireRealMarkdownContext,
+  ZenContextError,
+  type RaycastZenContext,
+} from "./zenContext.js";
+import { isContextCommandUnavailableError, mapMozeidonContextError } from "./zenContextErrors.js";
+
+export const ZEN_AI_TOOL_NAMES = [
+  "zen_get_active_context",
+  "zen_get_selection_or_page",
+  "zen_list_tabs",
+  "zen_search_tabs",
+  "zen_get_tab_content",
+  "zen_open_or_focus_url",
+] as const;
+
+export type ZenAiToolName = (typeof ZEN_AI_TOOL_NAMES)[number];
+
+export type ZenToolResponse<T> =
+  | {
+      ok: true;
+      tool: ZenAiToolName;
+      data: T;
+      warnings: string[];
+    }
+  | {
+      ok: false;
+      tool: ZenAiToolName;
+      error: {
+        code: string;
+        message: string;
+      };
+      warnings: string[];
+      details?: Record<string, unknown>;
+    };
+
+/**
+ * Identity of a specific browser tab, as requested, observed active, or
+ * recorded before a focus-then-read attempt. See spec 014.
+ */
+export type TargetTabIdentity = {
+  tabId?: number;
+  windowId?: number;
+  url?: string;
+  title?: string;
+};
+
+export type TargetTabActivation = {
+  strategy: "direct" | "focus-then-read";
+  attempted: boolean;
+  succeeded: boolean;
+  attempts: number;
+  elapsedMs: number;
+  errorCode?: string;
+};
+
+export type TargetTabReadMetadata = {
+  requestedTab?: TargetTabIdentity;
+  actualTab?: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  focusChanged: boolean;
+  restoreFocus: boolean;
+  focusRestored?: boolean;
+  activation?: TargetTabActivation;
+};
+
+export type ZenSource = {
+  title?: string;
+  url?: string;
+  tabId?: number;
+  windowId?: number;
+  active?: boolean;
+};
+
+export type ZenGetActiveContextInput = {
+  format?: "markdown" | "text" | "json";
+  requireContent?: boolean;
+};
+
+export type ZenGetSelectionOrPageInput = {
+  format?: "markdown" | "text";
+  requireContent?: boolean;
+};
+
+export type ZenListTabsInput = {
+  includeWindows?: boolean;
+  limit?: number;
+};
+
+export type ZenSearchTabsInput = {
+  query: string;
+  limit?: number;
+};
+
+export type ZenGetTabContentInput = {
+  tabId?: number;
+  windowId?: number;
+  url?: string;
+  format?: "markdown" | "text";
+  requireContent?: boolean;
+  restoreFocus?: boolean;
+};
+
+export type ZenOpenOrFocusUrlInput = {
+  url: string;
+  preferFocusExisting?: boolean;
+};
+
+export type ZenGetActiveContextData = {
+  source: ZenSource;
+  format: "markdown" | "text" | "json";
+  markdown?: string;
+  text?: string;
+  context?: unknown;
+};
+
+export type ZenGetSelectionOrPageData = {
+  source: ZenSource;
+  kind: "zen-selection" | "raycast-selection" | "active-page";
+  format: "markdown" | "text";
+  text?: string;
+  markdown?: string;
+};
+
+export type ZenListTabsData = {
+  tabs: ZenToolTab[];
+};
+
+export type ZenSearchTabsData = {
+  query: string;
+  matches: ZenToolTabMatch[];
+};
+
+export type ZenGetTabContentData = {
+  source: ZenSource;
+  format: "markdown" | "text";
+  markdown?: string;
+  text?: string;
+  requestedTab?: TargetTabIdentity;
+  actualTab?: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  focusChanged: boolean;
+  restoreFocus: boolean;
+  focusRestored?: boolean;
+  activation?: TargetTabActivation;
+};
+
+export type ZenOpenOrFocusUrlData = {
+  action: "focused-existing" | "opened-new";
+  source: ZenSource;
+};
+
+export type ZenToolTab = {
+  id: number;
+  windowId?: number;
+  title: string;
+  url: string;
+  active?: boolean;
+  pinned?: boolean;
+  windowFocused?: boolean;
+};
+
+export type ZenToolTabMatch = ZenToolTab & {
+  score?: number;
+  reason?: string;
+};
+
+export type ZenAiToolDependencies = {
+  getContext: (format: "markdown" | "text" | "json") => Promise<RaycastZenContext>;
+  /** Direct tab-targeted read (spec 014 Phase 2). Throws when the installed CLI predates it. */
+  getContextForTab: (
+    tabId: number,
+    windowId: number,
+    format: "markdown" | "text" | "json",
+  ) => Promise<RaycastZenContext>;
+  getZenSelection: () => Promise<RaycastZenContext>;
+  getRaycastSelectedText: () => Promise<string | undefined>;
+  listTabs: (includeWindows: boolean) => Promise<MozeidonTabsWithWindowsPayload>;
+  switchTab: (windowId: number, tabId: number) => Promise<void> | void;
+  openUrl: (url: string) => Promise<void> | void;
+  /** Overridable for tests. Defaults to a real timer. See spec 014 activation polling. */
+  wait?: (ms: number) => Promise<void>;
+};
+
+export type MozeidonTabsWithWindowsPayload = {
+  data: MozeidonTab[];
+  windows?: Array<{
+    id: number;
+    isLastFocused?: boolean;
+  }>;
+};
+
+export const ZEN_AI_TOOL_DEFINITIONS: Array<{
+  name: ZenAiToolName;
+  title: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}> = [
+  {
+    name: "zen_get_active_context",
+    title: "Get Active Zen Context",
+    description: "Get the active Zen tab page context using Mozeidon. Use it to summarize or inspect the current page.",
+    inputSchema: {
+      format: ["markdown", "text", "json"],
+      requireContent: "boolean",
+    },
+  },
+  {
+    name: "zen_get_selection_or_page",
+    title: "Get Zen Selection or Page",
+    description: "Get Zen DOM selection, Raycast selected text, or active Zen page content in that order.",
+    inputSchema: {
+      format: ["markdown", "text"],
+      requireContent: "boolean",
+    },
+  },
+  {
+    name: "zen_list_tabs",
+    title: "List Zen Tabs",
+    description: "List currently open Zen tabs with stable tab and window metadata.",
+    inputSchema: {
+      includeWindows: "boolean",
+      limit: "number",
+    },
+  },
+  {
+    name: "zen_search_tabs",
+    title: "Search Zen Tabs",
+    description: "Search currently open Zen tabs by title and URL.",
+    inputSchema: {
+      query: "string",
+      limit: "number",
+    },
+  },
+  {
+    name: "zen_get_tab_content",
+    title: "Get Zen Tab Content",
+    description: "Get content for the active or unambiguously identified Zen tab using the context API.",
+    inputSchema: {
+      tabId: "number",
+      windowId: "number",
+      url: "string",
+      format: ["markdown", "text"],
+      requireContent: "boolean",
+      restoreFocus: "boolean",
+    },
+  },
+  {
+    name: "zen_open_or_focus_url",
+    title: "Open or Focus URL in Zen",
+    description: "Open an http(s) URL in Zen or focus an already-open matching tab. Non-destructive.",
+    inputSchema: {
+      url: "string",
+      preferFocusExisting: "boolean",
+    },
+  },
+];
+
+export async function zenGetActiveContext(
+  input: ZenGetActiveContextInput,
+  dependencies: ZenAiToolDependencies,
+): Promise<ZenToolResponse<ZenGetActiveContextData>> {
+  const format = getContextFormat(input.format);
+  const requireContent = input.requireContent ?? true;
+
+  return withToolErrors("zen_get_active_context", async () => {
+    const context = await dependencies.getContext(format);
+    const data = mapContextOutput(context, format, requireContent);
+    return ok("zen_get_active_context", data, context.warnings);
+  });
+}
+
+export async function zenGetSelectionOrPage(
+  input: ZenGetSelectionOrPageInput,
+  dependencies: ZenAiToolDependencies,
+): Promise<ZenToolResponse<ZenGetSelectionOrPageData>> {
+  const format = getSelectionFormat(input.format);
+  const requireContent = input.requireContent ?? true;
+
+  return withToolErrors<ZenGetSelectionOrPageData>("zen_get_selection_or_page", async () => {
+    const zenSelection = await recoverableZenSelection(dependencies);
+    if (zenSelection.selectionText && zenSelection.isDomSelection) {
+      return ok(
+        "zen_get_selection_or_page",
+        {
+          source: sourceFromContext(zenSelection),
+          kind: "zen-selection",
+          format,
+          text: zenSelection.selectionText,
+          markdown: format === "markdown" ? zenSelection.selectionText : undefined,
+        },
+        zenSelection.warnings,
+      );
+    }
+
+    // Prefer the Zen active page over an OS-level Raycast selection: while
+    // Zen is showing a usable page, an unrelated selection in some other
+    // app shouldn't pre-empt it. Raycast's selection is only a last resort
+    // for when Zen genuinely has nothing usable (e.g. a New Tab page). A
+    // transient active-page fetch failure must not block that last resort,
+    // so defer any thrown error until after checking the Raycast selection.
+    let pageContext: RaycastZenContext | undefined;
+    let pageFetchError: unknown;
+    let pageFetchFailed = false;
+    try {
+      pageContext = await dependencies.getContext(format);
+    } catch (error) {
+      pageFetchError = error;
+      pageFetchFailed = true;
+    }
+
+    const pageContentError = pageContext ? getContentUsabilityError(pageContext, format) : undefined;
+
+    if (pageContext && (!pageContentError || !requireContent)) {
+      const activePageData = mapContextOutput(pageContext, format, requireContent);
+      return ok(
+        "zen_get_selection_or_page",
+        {
+          source: activePageData.source,
+          kind: "active-page",
+          format,
+          text: activePageData.text,
+          markdown: activePageData.markdown,
+        },
+        pageContext.warnings,
+      );
+    }
+
+    const raycastSelection = trimToText(await dependencies.getRaycastSelectedText());
+    if (raycastSelection) {
+      // Raycast's selected-text API reads whatever is highlighted in the
+      // frontmost app, which is not scoped to Zen. Don't attach Zen page
+      // metadata here — that text may have nothing to do with it.
+      return ok(
+        "zen_get_selection_or_page",
+        {
+          source: {},
+          kind: "raycast-selection",
+          format,
+          text: raycastSelection,
+          markdown: format === "markdown" ? raycastSelection : undefined,
+        },
+        zenSelection.warnings,
+      );
+    }
+
+    if (pageFetchFailed) throw pageFetchError;
+    throw pageContentError;
+  });
+}
+
+export async function zenListTabs(
+  input: ZenListTabsInput,
+  dependencies: ZenAiToolDependencies,
+): Promise<ZenToolResponse<ZenListTabsData>> {
+  const includeWindows = input.includeWindows ?? true;
+  const limit = boundedLimit(input.limit, 50, 100);
+
+  return withToolErrors("zen_list_tabs", async () => {
+    const payload = await dependencies.listTabs(includeWindows);
+    const tabs = sortToolTabs(mapToolTabs(payload)).slice(0, limit);
+    return ok("zen_list_tabs", { tabs });
+  });
+}
+
+export async function zenSearchTabs(
+  input: ZenSearchTabsInput,
+  dependencies: ZenAiToolDependencies,
+): Promise<ZenToolResponse<ZenSearchTabsData>> {
+  const query = trimToText(input?.query);
+  const limit = boundedLimit(input?.limit, 10, 50);
+  if (!query) return fail("zen_search_tabs", "invalid_input", "Query is required.");
+
+  return withToolErrors("zen_search_tabs", async () => {
+    const payload = await dependencies.listTabs(true);
+    const matches = searchToolTabs(sortToolTabs(mapToolTabs(payload)), query).slice(0, limit);
+    return ok("zen_search_tabs", { query, matches });
+  });
+}
+
+export async function zenGetTabContent(
+  input: ZenGetTabContentInput,
+  dependencies: ZenAiToolDependencies,
+): Promise<ZenToolResponse<ZenGetTabContentData>> {
+  const safeInput: ZenGetTabContentInput = input ?? {};
+  const format = getSelectionFormat(safeInput.format);
+  const requireContent = safeInput.requireContent ?? true;
+  const restoreFocus = safeInput.restoreFocus ?? true;
+  const targetValidationError = validateTabContentTarget(safeInput);
+  if (targetValidationError) {
+    return fail("zen_get_tab_content", "invalid_input", targetValidationError);
+  }
+
+  return withToolErrors<ZenGetTabContentData>("zen_get_tab_content", async () => {
+    if (!hasTabTarget(safeInput)) {
+      const context = await dependencies.getContext(format);
+      const data = mapContextOutput(context, format, requireContent);
+      return ok(
+        "zen_get_tab_content",
+        {
+          source: data.source,
+          format,
+          markdown: data.markdown,
+          text: data.text,
+          focusChanged: false,
+          restoreFocus,
+        },
+        context.warnings,
+      );
+    }
+
+    const payload = await dependencies.listTabs(true);
+    const tabs = mapToolTabs(payload);
+    const originalTab = findActiveIdentity(tabs);
+    const tab = matchTabTarget(tabs, safeInput);
+    const requestedTab: TargetTabIdentity = { tabId: tab.id, windowId: tab.windowId, url: tab.url, title: tab.title };
+
+    const stabilized = await stabilizeTargetedRead(
+      {
+        requestedTab,
+        originalTab,
+        alreadyActive: !shouldSwitchBeforeReading(tab),
+        format,
+        restoreFocus,
+        requireContent,
+      },
+      dependencies,
+    );
+
+    const data = mapContextOutput(stabilized.context, format, requireContent);
+    return ok(
+      "zen_get_tab_content",
+      {
+        source: data.source,
+        format,
+        markdown: data.markdown,
+        text: data.text,
+        requestedTab: stabilized.metadata.requestedTab,
+        actualTab: stabilized.metadata.actualTab,
+        originalTab: stabilized.metadata.originalTab,
+        focusChanged: stabilized.metadata.focusChanged,
+        restoreFocus: stabilized.metadata.restoreFocus,
+        focusRestored: stabilized.metadata.focusRestored,
+        activation: stabilized.metadata.activation,
+      },
+      [...stabilized.context.warnings, ...stabilized.warnings],
+    );
+  });
+}
+
+const ACTIVATION_MAX_ATTEMPTS = 10;
+const ACTIVATION_DELAY_MS = 100;
+const ACTIVATION_TIMEOUT_MS = 1500;
+
+type StabilizeTargetedReadOptions = {
+  requestedTab: TargetTabIdentity;
+  originalTab?: TargetTabIdentity;
+  alreadyActive: boolean;
+  format: "markdown" | "text" | "json";
+  restoreFocus: boolean;
+  requireContent: boolean;
+};
+
+type StabilizeTargetedReadResult = {
+  context: RaycastZenContext;
+  metadata: TargetTabReadMetadata;
+  warnings: string[];
+};
+
+/**
+ * Reads a non-active target tab. Prefers a direct read (spec 014, Phase 2)
+ * that never touches browser focus; falls back to focus-then-read (Phase 1)
+ * only when the installed CLI predates direct tab targeting.
+ */
+async function stabilizeTargetedRead(
+  options: StabilizeTargetedReadOptions,
+  dependencies: ZenAiToolDependencies,
+): Promise<StabilizeTargetedReadResult> {
+  if (options.alreadyActive) {
+    return stabilizeWithFocusThenRead(options, dependencies);
+  }
+
+  const direct = await tryDirectTargetedRead(options, dependencies);
+  if (direct) return direct;
+
+  return stabilizeWithFocusThenRead(options, dependencies);
+}
+
+/**
+ * Direct tab-targeted read (spec 014, Phase 2): read the target tab by id
+ * without switching to it. Returns undefined only when the installed CLI
+ * doesn't support `context tab` yet, signaling the caller to fall back to
+ * focus-then-read. Any other failure (tab closed, mismatch, content
+ * unavailable) is thrown directly — a different strategy wouldn't fix it.
+ */
+async function tryDirectTargetedRead(
+  options: StabilizeTargetedReadOptions,
+  dependencies: ZenAiToolDependencies,
+): Promise<StabilizeTargetedReadResult | undefined> {
+  const { requestedTab, originalTab, restoreFocus } = options;
+  const start = Date.now();
+
+  let context: RaycastZenContext;
+  try {
+    context = await dependencies.getContextForTab(
+      requestedTab.tabId as number,
+      requestedTab.windowId as number,
+      options.format,
+    );
+  } catch (error) {
+    if (isContextCommandUnavailableError(error)) return undefined;
+    throw error;
+  }
+
+  const activation: TargetTabActivation = {
+    strategy: "direct",
+    attempted: true,
+    succeeded: true,
+    attempts: 1,
+    elapsedMs: Date.now() - start,
+  };
+
+  const actualTab = identityFromContext(context);
+  if (!sameTab(requestedTab, actualTab)) {
+    throw new ZenToolError("target_tab_mismatch", "Zen Context read a different tab than requested.", {
+      requestedTab,
+      actualTab,
+      originalTab,
+      focusChanged: false,
+      restoreFocus,
+      activation,
+    });
+  }
+
+  try {
+    ensureRequiredContent(context, options.format, options.requireContent);
+  } catch (error) {
+    throw attachStabilizationDetails(error, {
+      requestedTab,
+      actualTab,
+      originalTab,
+      focusChanged: false,
+      restoreFocus,
+      activation,
+    });
+  }
+
+  return {
+    context,
+    metadata: { requestedTab, actualTab, originalTab, focusChanged: false, restoreFocus, activation },
+    warnings: [],
+  };
+}
+
+/**
+ * Focus-then-read stabilization (spec 014, Phase 1): switch to the target
+ * tab, verify the switch actually landed on it, extract context, verify the
+ * context reports the same tab, then restore the original focus. Fails
+ * closed at every verification step rather than returning ambiguous content.
+ */
+async function stabilizeWithFocusThenRead(
+  options: StabilizeTargetedReadOptions,
+  dependencies: ZenAiToolDependencies,
+): Promise<StabilizeTargetedReadResult> {
+  const { requestedTab, originalTab, restoreFocus } = options;
+
+  if (options.alreadyActive) {
+    const context = await dependencies.getContext(options.format);
+    const actualTab = identityFromContext(context);
+    const activation: TargetTabActivation = {
+      strategy: "focus-then-read",
+      attempted: false,
+      succeeded: true,
+      attempts: 0,
+      elapsedMs: 0,
+    };
+
+    if (!sameTab(requestedTab, actualTab)) {
+      throw new ZenToolError("target_tab_mismatch", "Zen Context read a different tab than requested.", {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: false,
+        restoreFocus,
+        activation,
+      });
+    }
+
+    try {
+      ensureRequiredContent(context, options.format, options.requireContent);
+    } catch (error) {
+      throw attachStabilizationDetails(error, {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: false,
+        restoreFocus,
+        activation,
+      });
+    }
+
+    return {
+      context,
+      metadata: { requestedTab, actualTab, originalTab, focusChanged: false, restoreFocus, activation },
+      warnings: [],
+    };
+  }
+
+  const start = Date.now();
+  try {
+    await dependencies.switchTab(requestedTab.windowId as number, requestedTab.tabId as number);
+  } catch (error) {
+    const activation: TargetTabActivation = {
+      strategy: "focus-then-read",
+      attempted: true,
+      succeeded: false,
+      attempts: 0,
+      elapsedMs: Date.now() - start,
+      errorCode: "tab_activation_failed",
+    };
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "tab_activation_failed",
+      messageFromError(error),
+      { requestedTab, originalTab, focusChanged: true, restoreFocus, focusRestored: restore?.succeeded, activation },
+      restore?.warnings,
+    );
+  }
+
+  const activationOutcome = await pollForActiveTab(requestedTab, dependencies, {
+    maxAttempts: ACTIVATION_MAX_ATTEMPTS,
+    delayMs: ACTIVATION_DELAY_MS,
+    timeoutMs: ACTIVATION_TIMEOUT_MS,
+    start,
+  });
+
+  const activation: TargetTabActivation = {
+    strategy: "focus-then-read",
+    attempted: true,
+    succeeded: activationOutcome.succeeded,
+    attempts: activationOutcome.attempts,
+    elapsedMs: Date.now() - start,
+  };
+
+  if (!activationOutcome.succeeded) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "activation_timeout",
+      "The requested Zen tab did not become active in time.",
+      {
+        requestedTab,
+        actualTab: activationOutcome.actualTab,
+        originalTab,
+        focusChanged: true,
+        restoreFocus,
+        focusRestored: restore?.succeeded,
+        activation,
+      },
+      restore?.warnings,
+    );
+  }
+
+  let context: RaycastZenContext;
+  try {
+    context = await dependencies.getContext(options.format);
+  } catch (error) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "context_extraction_failed",
+      messageFromError(error),
+      { requestedTab, originalTab, focusChanged: true, restoreFocus, focusRestored: restore?.succeeded, activation },
+      restore?.warnings,
+    );
+  }
+
+  const actualTab = identityFromContext(context);
+  if (!sameTab(requestedTab, actualTab)) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw new ZenToolError(
+      "target_tab_mismatch",
+      "Zen Context read a different tab than requested.",
+      {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: true,
+        restoreFocus,
+        focusRestored: restore?.succeeded,
+        activation,
+      },
+      restore?.warnings,
+    );
+  }
+
+  try {
+    ensureRequiredContent(context, options.format, options.requireContent);
+  } catch (error) {
+    const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+    throw attachStabilizationDetails(
+      error,
+      {
+        requestedTab,
+        actualTab,
+        originalTab,
+        focusChanged: true,
+        restoreFocus,
+        focusRestored: restore?.succeeded,
+        activation,
+      },
+      restore?.warnings,
+    );
+  }
+
+  const restore = restoreFocus ? await tryRestoreFocus(originalTab, dependencies) : undefined;
+  return {
+    context,
+    metadata: {
+      requestedTab,
+      actualTab,
+      originalTab,
+      focusChanged: true,
+      restoreFocus,
+      focusRestored: restore?.succeeded,
+      activation,
+    },
+    warnings: restore?.warnings ?? [],
+  };
+}
+
+function ensureRequiredContent(
+  context: RaycastZenContext,
+  format: "markdown" | "text" | "json",
+  requireContent: boolean,
+): void {
+  if (requireContent) requireRealContentContext(context, format);
+}
+
+function attachStabilizationDetails(
+  error: unknown,
+  details: Record<string, unknown>,
+  warnings?: string[],
+): ZenToolError {
+  if (error instanceof ZenToolError) {
+    return new ZenToolError(error.code, error.message, details, warnings ?? error.extraWarnings);
+  }
+  return new ZenToolError("content_unavailable", messageFromError(error), details, warnings);
+}
+
+async function pollForActiveTab(
+  requestedTab: TargetTabIdentity,
+  dependencies: ZenAiToolDependencies,
+  options: { maxAttempts: number; delayMs: number; timeoutMs: number; start: number },
+): Promise<{ succeeded: boolean; attempts: number; actualTab?: TargetTabIdentity }> {
+  let attempts = 0;
+  let actualTab: TargetTabIdentity | undefined;
+
+  while (attempts < options.maxAttempts) {
+    attempts++;
+    const payload = await dependencies.listTabs(true);
+    actualTab = findActiveIdentity(mapToolTabs(payload), requestedTab.windowId);
+    if (actualTab && actualTab.tabId === requestedTab.tabId && actualTab.windowId === requestedTab.windowId) {
+      return { succeeded: true, attempts, actualTab };
+    }
+    if (Date.now() - options.start >= options.timeoutMs || attempts >= options.maxAttempts) break;
+    await (dependencies.wait ?? defaultWait)(options.delayMs);
+  }
+
+  return { succeeded: false, attempts, actualTab };
+}
+
+async function tryRestoreFocus(
+  originalTab: TargetTabIdentity | undefined,
+  dependencies: ZenAiToolDependencies,
+): Promise<{ succeeded: boolean; warnings: string[] }> {
+  if (originalTab?.tabId === undefined || originalTab?.windowId === undefined) {
+    return { succeeded: false, warnings: ["focus_restore_failed"] };
+  }
+
+  try {
+    await dependencies.switchTab(originalTab.windowId, originalTab.tabId);
+  } catch (_) {
+    return { succeeded: false, warnings: ["focus_restore_failed"] };
+  }
+
+  const outcome = await pollForActiveTab(originalTab, dependencies, {
+    maxAttempts: ACTIVATION_MAX_ATTEMPTS,
+    delayMs: ACTIVATION_DELAY_MS,
+    timeoutMs: ACTIVATION_TIMEOUT_MS,
+    start: Date.now(),
+  });
+
+  if (!outcome.succeeded) return { succeeded: false, warnings: ["focus_restore_mismatch"] };
+  return { succeeded: true, warnings: [] };
+}
+
+function defaultWait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function identityFromContext(context: RaycastZenContext): TargetTabIdentity | undefined {
+  if (context.tabId === undefined || context.windowId === undefined) return undefined;
+  return { tabId: context.tabId, windowId: context.windowId, url: context.url, title: context.title };
+}
+
+function sameTab(requested: TargetTabIdentity, actual: TargetTabIdentity | undefined): boolean {
+  return actual !== undefined && requested.tabId === actual.tabId && requested.windowId === actual.windowId;
+}
+
+function findActiveIdentity(tabs: ZenToolTab[], windowId?: number): TargetTabIdentity | undefined {
+  const candidates = tabs.filter((tab) => tab.active && (windowId === undefined || tab.windowId === windowId));
+  const preferred = candidates.find((tab) => tab.windowFocused) ?? candidates[0];
+  if (!preferred) return undefined;
+  return { tabId: preferred.id, windowId: preferred.windowId, url: preferred.url, title: preferred.title };
+}
+
+function messageFromError(error: unknown): string {
+  return error instanceof Error ? error.message : "Zen tab activation failed.";
+}
+
+export async function zenOpenOrFocusUrl(
+  input: ZenOpenOrFocusUrlInput,
+  dependencies: ZenAiToolDependencies,
+): Promise<ZenToolResponse<ZenOpenOrFocusUrlData>> {
+  const url = normalizeHttpUrl(input?.url);
+  if (!url) return fail("zen_open_or_focus_url", "invalid_url", "URL must be an absolute http(s) URL.");
+
+  const preferFocusExisting = input.preferFocusExisting ?? true;
+
+  return withToolErrors<ZenOpenOrFocusUrlData>("zen_open_or_focus_url", async () => {
+    if (preferFocusExisting) {
+      const payload = await dependencies.listTabs(true);
+      const matches = mapToolTabs(payload).filter((tab) => normalizeHttpUrl(tab.url) === url);
+      if (matches.length > 0) {
+        const tab = sortToolTabs(matches)[0];
+        await dependencies.switchTab(tab.windowId ?? 0, tab.id);
+        return ok("zen_open_or_focus_url", {
+          action: "focused-existing",
+          source: sourceFromTab(tab),
+        });
+      }
+    }
+
+    await dependencies.openUrl(url);
+    return ok("zen_open_or_focus_url", {
+      action: "opened-new",
+      source: { url },
+    });
+  });
+}
+
+function mapContextOutput(
+  context: RaycastZenContext,
+  format: "markdown" | "text" | "json",
+  requireContent: boolean,
+): ZenGetActiveContextData {
+  if (requireContent) requireRealContentContext(context, format);
+
+  return {
+    source: sourceFromContext(context),
+    format,
+    markdown: format === "markdown" ? context.markdown : undefined,
+    text: format === "text" ? getContentValue(context.raw.content?.text) ?? context.markdown : undefined,
+    context: format === "json" ? context.raw : undefined,
+  };
+}
+
+function getContentUsabilityError(
+  context: RaycastZenContext,
+  format: "markdown" | "text" | "json",
+): ZenToolError | undefined {
+  try {
+    requireRealContentContext(context, format);
+    return undefined;
+  } catch (error) {
+    if (error instanceof ZenToolError) return error;
+    throw error;
+  }
+}
+
+function requireRealContentContext(context: RaycastZenContext, format: "markdown" | "text" | "json"): void {
+  const contentUsability = context.contentUsability ?? classifyZenContextContent(context.raw);
+  if (contentUsability === "metadata-only" || contentUsability === "empty" || contentUsability === "unavailable") {
+    throw new ZenToolError(
+      "content_unavailable",
+      "Active page content is unavailable. Check Zen context permissions or page support.",
+    );
+  }
+  if (contentUsability === "error") {
+    throw new ZenToolError(
+      context.raw.error?.code ?? "content_unavailable",
+      context.raw.error?.message ??
+        "Active page content is unavailable. Check Zen context permissions or page support.",
+    );
+  }
+
+  if (format === "markdown") {
+    requireRealMarkdownContext(context);
+    return;
+  }
+
+  if (format === "text" && !getContentValue(context.raw.content?.text) && !trimToText(context.markdown)) {
+    throw new ZenToolError(
+      "content_unavailable",
+      "Active page content is unavailable. Check Zen context permissions or page support.",
+    );
+  }
+
+  if (
+    format === "json" &&
+    !getContentValue(context.raw.content?.text) &&
+    !getContentValue(context.raw.content?.markdown) &&
+    !trimToText(context.raw.content?.selection?.text)
+  ) {
+    throw new ZenToolError(
+      "content_unavailable",
+      "Active page content is unavailable. Check Zen context permissions or page support.",
+    );
+  }
+}
+
+async function recoverableZenSelection(dependencies: ZenAiToolDependencies): Promise<RaycastZenContext> {
+  try {
+    const context = await dependencies.getZenSelection();
+    const code = context.raw.error?.code;
+    if (context.raw.ok === false && !isRecoverableSelectionCode(code)) {
+      throw new ZenToolError(code ?? "context_error", context.raw.error?.message ?? "Zen selection failed.");
+    }
+
+    return context;
+  } catch (error) {
+    const code = getErrorCode(error);
+    if (!code || !isRecoverableSelectionCode(code)) throw error;
+
+    const message = error instanceof Error ? error.message : "Zen selection is unavailable.";
+    return {
+      warnings: [code ?? "selection_unavailable"],
+      raw: {
+        ok: false,
+        error: {
+          code,
+          message,
+        },
+        warnings: [code ?? "selection_unavailable"],
+      },
+    };
+  }
+}
+
+function matchTabTarget(tabs: ZenToolTab[], input: ZenGetTabContentInput): ZenToolTab {
+  const matches =
+    input.tabId !== undefined && input.windowId !== undefined
+      ? tabs.filter((tab) => tab.id === input.tabId && tab.windowId === input.windowId)
+      : input.url
+        ? tabs.filter((tab) => normalizeHttpUrl(tab.url) === normalizeHttpUrl(input.url))
+        : [];
+
+  if (matches.length === 0) {
+    throw new ZenToolError("tab_not_found", "The requested Zen tab was not found.");
+  }
+
+  if (matches.length > 1) {
+    throw new ZenToolError("ambiguous_tab", "The requested Zen tab target is ambiguous.");
+  }
+
+  return matches[0];
+}
+
+function shouldSwitchBeforeReading(tab: ZenToolTab): boolean {
+  return tab.active !== true || tab.windowFocused !== true;
+}
+
+function mapToolTabs(payload: MozeidonTabsWithWindowsPayload): ZenToolTab[] {
+  const focusedWindowIds = new Set(
+    (payload.windows ?? []).filter((window) => window.isLastFocused).map((window) => window.id),
+  );
+
+  return payload.data.map((tab) => ({
+    id: tab.id,
+    windowId: tab.windowId,
+    title: tab.title,
+    url: tab.url,
+    active: tab.active,
+    pinned: tab.pinned,
+    windowFocused: focusedWindowIds.has(tab.windowId) || undefined,
+  }));
+}
+
+function sortToolTabs(tabs: ZenToolTab[]): ZenToolTab[] {
+  return [...tabs].sort(
+    (first, second) =>
+      Number(second.windowFocused) - Number(first.windowFocused) || Number(second.active) - Number(first.active),
+  );
+}
+
+function searchToolTabs(tabs: ZenToolTab[], query: string): ZenToolTabMatch[] {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+  return tabs
+    .map((tab): ZenToolTabMatch | undefined => {
+      const haystack = `${tab.title} ${tab.url}`.toLowerCase();
+      const matchedTerms = terms.filter((term) => haystack.includes(term));
+      if (matchedTerms.length === 0) return undefined;
+
+      const titleMatches = terms.filter((term) => tab.title.toLowerCase().includes(term)).length;
+      const score = matchedTerms.length * 10 + titleMatches * 5 + Number(tab.active) * 2 + Number(tab.windowFocused);
+      return {
+        ...tab,
+        score,
+        reason: `Matched ${matchedTerms.join(", ")}`,
+      };
+    })
+    .filter((tab): tab is ZenToolTabMatch => tab !== undefined)
+    .sort((first, second) => (second.score ?? 0) - (first.score ?? 0));
+}
+
+function sourceFromContext(context: Pick<RaycastZenContext, "title" | "url">): ZenSource {
+  return {
+    title: context.title,
+    url: context.url,
+  };
+}
+
+function sourceFromTab(tab: ZenToolTab): ZenSource {
+  return {
+    title: tab.title,
+    url: tab.url,
+    tabId: tab.id,
+    windowId: tab.windowId,
+    active: tab.active,
+  };
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (error instanceof ZenContextError) return error.code;
+  if (error instanceof ZenToolError) return error.code;
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
+}
+
+function ok<T>(tool: ZenAiToolName, data: T, warnings: string[] = []): ZenToolResponse<T> {
+  return {
+    ok: true,
+    tool,
+    data,
+    warnings,
+  };
+}
+
+function fail<T>(
+  tool: ZenAiToolName,
+  code: string,
+  message: string,
+  warnings: string[] = [],
+  details?: Record<string, unknown>,
+): ZenToolResponse<T> {
+  return {
+    ok: false,
+    tool,
+    error: { code, message },
+    warnings,
+    ...(details ? { details } : {}),
+  };
+}
+
+async function withToolErrors<T>(
+  tool: ZenAiToolName,
+  action: () => Promise<ZenToolResponse<T>>,
+): Promise<ZenToolResponse<T>> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof ZenToolError) {
+      return fail(tool, error.code, error.message, error.extraWarnings ?? [], error.details);
+    }
+
+    const mozeidonContextError = mapMozeidonContextError(error);
+    if (mozeidonContextError) return fail(tool, mozeidonContextError.code, mozeidonContextError.message);
+
+    const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "tool_failed";
+    const message = error instanceof Error ? error.message : "Zen AI tool failed.";
+    return fail(tool, code, message);
+  }
+}
+
+class ZenToolError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly details?: Record<string, unknown>,
+    public readonly extraWarnings?: string[],
+  ) {
+    super(message);
+    this.name = "ZenToolError";
+  }
+}
+
+function getContextFormat(value: unknown): "markdown" | "text" | "json" {
+  if (value === "text" || value === "json") return value;
+  return "markdown";
+}
+
+function getSelectionFormat(value: unknown): "markdown" | "text" {
+  if (value === "text") return "text";
+  return "markdown";
+}
+
+function boundedLimit(value: number | undefined, fallback: number, max: number): number {
+  if (!Number.isFinite(value) || value === undefined || value <= 0) return fallback;
+  return Math.min(Math.trunc(value), max);
+}
+
+function normalizeHttpUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return undefined;
+  }
+}
+
+function hasTabTarget(input: ZenGetTabContentInput): boolean {
+  return (input.tabId !== undefined && input.windowId !== undefined) || trimToText(input.url) !== undefined;
+}
+
+function validateTabContentTarget(input: ZenGetTabContentInput): string | undefined {
+  const hasTabId = input.tabId !== undefined;
+  const hasWindowId = input.windowId !== undefined;
+  if (hasTabId !== hasWindowId) {
+    return "tabId and windowId must be provided together.";
+  }
+
+  if (input.url !== undefined && !trimToText(input.url)) {
+    return "URL must be non-empty when provided.";
+  }
+
+  return undefined;
+}
+
+function trimToText(value: string | undefined): string | undefined {
+  const text = value?.trim();
+  return text ? text : undefined;
+}
