@@ -661,6 +661,56 @@ test("streamMozeidonLines does not reject when the process exits zero", async ()
   assert.deepEqual(await lines.next(), { done: true, value: undefined });
 });
 
+test("streamMozeidonLines kills the child process when abandoned before it exits", async () => {
+  // If the consumer stops iterating early (a for-await loop returning once
+  // cancelled, a component unmounting mid-stream, dev-mode hot reload, etc.)
+  // the process must not be left orphaned - still running, with nothing
+  // draining its stdio, held alive by its own listeners' closures.
+  const process = createFakeProcess();
+  const killCalls: Array<NodeJS.Signals | number | undefined> = [];
+  (process as unknown as { kill: (signal?: NodeJS.Signals | number) => boolean }).kill = (signal) => {
+    killCalls.push(signal);
+    return true;
+  };
+
+  const lines = streamMozeidonLines(["history", "-c", "500"], {
+    executable: "mozeidon",
+    spawnProcess: () => process,
+  });
+
+  process.stdout.push('{"data":[]}\n');
+  await lines.next();
+  // Never emits "close" - the process is still "running" from this
+  // generator's perspective when it's abandoned below.
+  await lines.return();
+
+  assert.equal(killCalls.length, 1);
+});
+
+test("streamMozeidonLines does not try to kill a process that has already exited", async () => {
+  const process = createFakeProcess();
+  const killCalls: unknown[] = [];
+  (process as unknown as { kill: () => boolean }).kill = () => {
+    killCalls.push(undefined);
+    return true;
+  };
+
+  const lines = streamMozeidonLines(["bookmarks", "-c", "1000"], {
+    executable: "mozeidon",
+    spawnProcess: () => process,
+  });
+
+  process.stdout.push('{"data":[]}\n');
+  process.stdout.push(null);
+  setImmediate(() => process.emit("close", 0));
+
+  assert.deepEqual(await lines.next(), { done: false, value: '{"data":[]}' });
+  (process as unknown as { exitCode: number }).exitCode = 0;
+  assert.deepEqual(await lines.next(), { done: true, value: undefined });
+
+  assert.equal(killCalls.length, 0);
+});
+
 test("parseMozeidonJson parses tabs and bookmark payloads", () => {
   const tabs = parseMozeidonJson<{ data: Array<{ id: number; title: string }> }>(
     '{"data":[{"id":1,"title":"Example"}]}',
@@ -1087,10 +1137,16 @@ function createFakeProcess(): ChildProcessWithoutNullStreams {
     stdout: PassThrough;
     stderr: PassThrough;
     stdin: PassThrough;
+    exitCode: number | null;
+    signalCode: NodeJS.Signals | null;
+    kill: (signal?: NodeJS.Signals | number) => boolean;
   };
   process.stdout = new PassThrough();
   process.stderr = new PassThrough();
   process.stdin = new PassThrough();
+  process.exitCode = null;
+  process.signalCode = null;
+  process.kill = () => true;
   return process as unknown as ChildProcessWithoutNullStreams;
 }
 

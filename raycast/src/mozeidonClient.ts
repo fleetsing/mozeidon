@@ -181,6 +181,17 @@ export async function* streamMozeidonLines(
     }
   } finally {
     lines.close();
+    // If this generator is abandoned before the child process finishes on
+    // its own (component unmounts mid-stream, an early return in the
+    // consuming for-await loop, dev-mode hot reload, etc.), the process
+    // would otherwise be left running with nothing draining its stdio -
+    // orphaned, but still reachable from its own listeners' closures
+    // (including the stderr accumulator above), which keeps that memory
+    // alive for as long as the process runs. Kill it if it hasn't already
+    // exited.
+    if (command.exitCode === null && command.signalCode === null) {
+      command.kill();
+    }
   }
 }
 
