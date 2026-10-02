@@ -83,6 +83,16 @@ Read-only tools only. No new CLI/add-on/native-messenger capability or permissio
 
 **Unprompted-use guidance.** MCP has no built-in mechanism to require user confirmation before a plain (non-mutating) tool call — that's the `confirmation semantics` this spec already deferred to a future mutating-tools pass. For read tools, the only real lever a server has over *when* a calling model reaches for a tool is its `description` text. Registering this server at a broad scope (e.g. Claude Code's user scope, available in every project) raises a real concern: without guidance, a model could proactively call `zen_get_active_context`/`zen_get_selection_or_page`/etc. in an unrelated conversation just because the tools are available, reading whatever page or selection happens to be open in Zen without being asked. Each of the 5 tools' descriptions therefore explicitly states it should only be called when the user explicitly asks about their Zen tabs/page/selection, never proactively or to infer unstated context. This is guidance, not enforcement — a sufficiently context-chasing model could still ignore it — but it's the standard, effective lever available here.
 
+## Post-Review Fixes
+
+Code review surfaced five real findings, addressed before merge:
+
+- `package.json`'s `engines.node: >=18` was simply wrong — `@hono/node-server` (a locked transitive dependency of `@modelcontextprotocol/sdk`) requires Node `>=20`. Fixed to `>=20`, matching CI's Node 22.
+- The `context_command_unavailable` error message (shared via the duplicated `zenContextErrors.ts`) referenced "the Raycast extension's Mozeidon CLI filepath setting" — confusing in a standalone MCP server. Reworded generically to cover both deployment contexts, in both copies, rather than diverging the shared file.
+- `zen_get_tab_content`'s schema descriptions implied `windowId` could disambiguate a `url` target. Verified via a direct call that `{url, windowId}` actually fails validation with `invalid_input` ("tabId and windowId must be provided together"), not `ambiguous_tab` as the review's specific claim suggested — there is no live behavioral bug; `windowId` can only ever pair with `tabId`. Fixed the descriptions to say so accurately.
+- `toolResult.ts`'s error responses dropped `warnings` and structured `details`, leaving MCP clients with only a flat error string. Now included in both the text (for plain display) and `structuredContent` (for programmatic consumption), matching the success path's existing use of `structuredContent`.
+- Renamed a test whose name didn't make clear it exercises `zenAiToolsCore.ts`'s shared logic via an injected dependency, not this server's real (always-undefined) `getRaycastSelectedText` wiring.
+
 ## Alternatives Considered
 
 - **Share code via an npm workspace now.** Rejected for this first pass — see "Code duplication" above.
