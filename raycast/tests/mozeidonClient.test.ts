@@ -12,7 +12,7 @@ import {
   validateBookmarkFolderPath,
 } from "../src/bookmarkCommands";
 import { buildDeleteHistoryItemArgs } from "../src/historyCommands";
-import { mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
+import { filterHistoryItems, mapMozeidonHistoryItemsToHistoryItems } from "../src/historyMappers";
 import {
   MozeidonClientError,
   buildIncognitoArgs,
@@ -317,6 +317,31 @@ test("mapMozeidonHistoryItemsToHistoryItems normalizes history payloads", () => 
     visitCount: undefined,
     lastVisitTime: undefined,
   });
+});
+
+test("filterHistoryItems matches across title, url, domain, and visit count", () => {
+  const items = mapMozeidonHistoryItemsToHistoryItems([
+    { id: "a", url: "https://www.example.com/page", title: "Example Page", vc: 5, t: 1 },
+    { id: "b", url: "https://other.test/path", title: "Other Site", vc: 42, t: 2 },
+  ]);
+
+  assert.deepEqual(
+    filterHistoryItems(items, "example").map((item) => item.id),
+    ["a"],
+  );
+  assert.deepEqual(
+    filterHistoryItems(items, "OTHER.TEST").map((item) => item.id),
+    ["b"],
+  );
+  assert.deepEqual(
+    filterHistoryItems(items, "42").map((item) => item.id),
+    ["b"],
+  );
+  assert.deepEqual(
+    filterHistoryItems(items, "  ").map((item) => item.id),
+    ["a", "b"],
+  );
+  assert.deepEqual(filterHistoryItems(items, "nonexistent"), []);
 });
 
 test("history open and delete inputs remain child process args", () => {

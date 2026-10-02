@@ -17,12 +17,22 @@ import { deleteHistoryItem, ensureFirefoxRunning, getHistoryChunks, openNewTab }
 import { UnknownError } from "./components/Error";
 import { COMMAND_NAME } from "./constants";
 import type { HistoryItem } from "./interfaces";
-import { urlWithoutScheme } from "./historyMappers";
+import { filterHistoryItems } from "./historyMappers";
+
+// Rendering every history item as a List.Item at once is what blew past
+// Raycast's 100 MB extension JS heap limit on large histories (thousands of
+// items) - mounting only one page at a time, growing via List's built-in
+// pagination, keeps rendered-element memory bounded regardless of history
+// size. The full list is still fetched and searched in memory; only
+// rendering is paginated.
+const PAGE_SIZE = 50;
 
 export default function HistoryCommand(): ReactElement {
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorView, setErrorView] = useState<ReactElement | undefined>();
+  const [searchText, setSearchText] = useState("");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,12 +69,37 @@ export default function HistoryCommand(): ReactElement {
     [historyItems, isLoading],
   );
 
+  const filteredHistoryItems = useMemo(
+    () => filterHistoryItems(sortedHistoryItems, searchText),
+    [sortedHistoryItems, searchText],
+  );
+
+  const visibleHistoryItems = useMemo(
+    () => filteredHistoryItems.slice(0, (page + 1) * PAGE_SIZE),
+    [filteredHistoryItems, page],
+  );
+
+  function handleSearchTextChange(text: string) {
+    setPage(0);
+    setSearchText(text);
+  }
+
   if (errorView) return errorView;
 
   return (
-    <List isLoading={isLoading} throttle={true} navigationTitle={`${COMMAND_NAME} History`}>
-      <List.Section title={`${sortedHistoryItems.length} History Items`}>
-        {sortedHistoryItems.map((item) => (
+    <List
+      isLoading={isLoading}
+      filtering={false}
+      onSearchTextChange={handleSearchTextChange}
+      navigationTitle={`${COMMAND_NAME} History`}
+      pagination={{
+        pageSize: PAGE_SIZE,
+        hasMore: visibleHistoryItems.length < filteredHistoryItems.length,
+        onLoadMore: () => setPage((currentPage) => currentPage + 1),
+      }}
+    >
+      <List.Section title={`${filteredHistoryItems.length} History Items`}>
+        {visibleHistoryItems.map((item) => (
           <HistoryListItem
             key={item.id}
             item={item}
@@ -89,7 +124,6 @@ function HistoryListItem(props: { item: HistoryItem; onDelete: () => void }) {
       title={item.title}
       subtitle={item.domain}
       icon={getHistoryIcon(item.url)}
-      keywords={[item.url, urlWithoutScheme(item.url), item.domain, item.visitCount?.toString() ?? ""]}
       accessories={accessories}
       actions={<HistoryActions item={item} onDelete={onDelete} />}
     />

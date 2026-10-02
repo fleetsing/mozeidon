@@ -65,7 +65,7 @@ Purpose: expose useful Mozeidon features without changing CLI/add-on.
 
 Candidate work:
 
-- History search/list. Implemented and verified; pagination bug found and fixed (Spec 016).
+- History search/list. Implemented and verified; pagination bug found and fixed (Spec 016); rendering-side extension memory-limit crash on large histories found and fixed (Spec 022).
 - Tab group list and group metadata display. Implemented and verified.
 - Duplicate tab. Implemented and verified.
 - Pin/unpin tab. Implemented and verified.
