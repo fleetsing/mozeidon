@@ -31,7 +31,8 @@ export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServ
     "zen_get_active_context",
     {
       title: "Get Active Zen Context",
-      description: "Get the active Zen tab page context using Mozeidon. Use it to summarize or inspect the current page.",
+      description:
+        "Get the active Zen tab's page context using Mozeidon, for summarizing or inspecting the current page. Only call this when the user explicitly asks about their active Zen tab or page - never proactively, and never to infer context the user hasn't asked you to look at.",
       inputSchema: zenGetActiveContextSchema,
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -46,7 +47,8 @@ export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServ
       // "read the frontmost app's selection" capability outside Raycast, so
       // this tool only ever resolves Zen's own DOM selection or its active
       // page content (spec 020) - never an unrelated app's selected text.
-      description: "Get Zen's own DOM selection if present, otherwise the active Zen page content.",
+      description:
+        "Get Zen's own DOM selection if present, otherwise the active Zen page content. Only call this when the user explicitly asks about their Zen selection or page - never proactively, and never to infer context the user hasn't asked you to look at.",
       inputSchema: zenGetSelectionOrPageSchema,
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -57,7 +59,8 @@ export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServ
     "zen_list_tabs",
     {
       title: "List Zen Tabs",
-      description: "List currently open Zen tabs with stable tab and window metadata.",
+      description:
+        "List currently open Zen tabs with stable tab and window metadata. Only call this when the user explicitly asks to see their open Zen tabs - never proactively.",
       inputSchema: zenListTabsSchema,
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -68,7 +71,8 @@ export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServ
     "zen_search_tabs",
     {
       title: "Search Zen Tabs",
-      description: "Search currently open Zen tabs by title and URL.",
+      description:
+        "Search currently open Zen tabs by title and URL. Only call this when the user explicitly asks to find a specific open Zen tab - never proactively.",
       inputSchema: zenSearchTabsSchema,
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -79,7 +83,8 @@ export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServ
     "zen_get_tab_content",
     {
       title: "Get Zen Tab Content",
-      description: "Get content for the active or unambiguously identified Zen tab using the context API.",
+      description:
+        "Get content for the active or unambiguously identified Zen tab using the context API. Only call this when the user explicitly asks about a specific Zen tab's content - never proactively, and never to infer context the user hasn't asked you to look at.",
       inputSchema: zenGetTabContentSchema,
       annotations: READ_ONLY_ANNOTATIONS,
     },

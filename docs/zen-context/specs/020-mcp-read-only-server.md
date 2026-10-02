@@ -80,6 +80,8 @@ New package, new tool surface for MCP clients. No changes to the CLI, add-on, na
 
 Read-only tools only. No new CLI/add-on/native-messenger capability or permission is introduced — this consumes only already-existing, already-permissioned CLI commands (`context active`, `context selection`, `context tab`, `tabs get --with-windows`, `tabs switch`). `tabs switch` is used only as an internal, auto-restored implementation detail of `zen_get_tab_content`, not exposed as its own callable action.
 
+**Unprompted-use guidance.** MCP has no built-in mechanism to require user confirmation before a plain (non-mutating) tool call — that's the `confirmation semantics` this spec already deferred to a future mutating-tools pass. For read tools, the only real lever a server has over *when* a calling model reaches for a tool is its `description` text. Registering this server at a broad scope (e.g. Claude Code's user scope, available in every project) raises a real concern: without guidance, a model could proactively call `zen_get_active_context`/`zen_get_selection_or_page`/etc. in an unrelated conversation just because the tools are available, reading whatever page or selection happens to be open in Zen without being asked. Each of the 5 tools' descriptions therefore explicitly states it should only be called when the user explicitly asks about their Zen tabs/page/selection, never proactively or to infer unstated context. This is guidance, not enforcement — a sufficiently context-chasing model could still ignore it — but it's the standard, effective lever available here.
+
 ## Alternatives Considered
 
 - **Share code via an npm workspace now.** Rejected for this first pass — see "Code duplication" above.
