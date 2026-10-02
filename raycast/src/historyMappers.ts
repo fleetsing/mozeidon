@@ -25,6 +25,25 @@ export function urlWithoutScheme(url: string): string {
   return url.replace(/(^\w+:|^)\/\//, "").replace("www.", "");
 }
 
+// Raycast's built-in List filtering only matches against currently-rendered
+// List.Items, which breaks once rendering is paginated (search would only
+// ever find items on already-loaded pages). This does the same substring
+// match ourselves over the full, already-fetched history so search still
+// covers everything regardless of how many pages are currently rendered.
+export function filterHistoryItems(items: HistoryItem[], searchText: string): HistoryItem[] {
+  const needle = searchText.trim().toLowerCase();
+  if (!needle) return items;
+
+  return items.filter((item) => historySearchHaystack(item).includes(needle));
+}
+
+function historySearchHaystack(item: HistoryItem): string {
+  return [item.title, item.url, urlWithoutScheme(item.url), item.domain, item.visitCount?.toString()]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+}
+
 function getHistoryItemId(item: MozeidonHistoryItem, lastVisitTime: number | undefined): string {
   const id = item.id?.trim();
   if (id) return id;
