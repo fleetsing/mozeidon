@@ -1,6 +1,6 @@
 # Context API
 
-This document sketches the stable context shape that Raycast, AI Extension tools, and a later MCP wrapper should share. It is a target contract, not a statement that every field is implemented today.
+This document sketches the stable context shape that Raycast, AI Extension tools, and the MCP wrapper (`mcp-server/`) should share. It is a target contract, not a statement that every field is implemented today.
 
 ## Design Goals
 

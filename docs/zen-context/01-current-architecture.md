@@ -67,6 +67,14 @@ Zen uses the Firefox-family add-on. The add-on receives commands from the native
 
 The add-on is the right layer only when data cannot be derived from existing CLI output. Current Zen Context page extraction uses the Firefox-family add-on for selected text, page DOM metadata, readable page content, and links.
 
+### MCP Server
+
+Location: `mcp-server/`
+
+A standalone `zen-mcp-server` package wrapping the same context API for MCP clients other than Raycast (Claude Code, Claude Desktop, etc.). It duplicates the portable core logic from `raycast/src/` (no `@raycast/api` dependency) rather than sharing it via a workspace — an accepted tradeoff, see Spec 020.
+
+It exposes five read-only tools: `zen_get_active_context`, `zen_get_selection_or_page`, `zen_list_tabs`, `zen_search_tabs`, `zen_get_tab_content`. `zen_open_or_focus_url` (the one mutating tool in the underlying API) is deliberately not registered here.
+
 ### Chrome Add-On
 
 Location: `chrome-addon/`
@@ -93,7 +101,7 @@ Current Raycast flow:
 
 ## Current Gaps
 
-- Raycast still does not expose every Mozeidon browser action, such as pin/unpin, move, duplicate, group mutation, or bookmark write flows.
-- MCP is intentionally not implemented yet.
-- Site adapters and local browsing memory are intentionally not implemented yet.
+- Move Tab to Start is a known, deferred bug (see Spec 004's progress log) — not fixed, deprioritized by the user. Move to End, duplicate, pin/unpin, and bookmark create/update/delete are implemented.
+- The MCP server (`mcp-server/`) only exposes read-only tools; mutating actions (e.g. opening/focusing a URL) are intentionally not exposed there yet, pending a designed MCP confirmation mechanism.
+- Site adapters and local browsing memory are intentionally not implemented yet (Milestone 6).
 - Context extraction on normal web pages depends on the documented Firefox/Zen `<all_urls>` host-permission exception.
