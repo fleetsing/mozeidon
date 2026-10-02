@@ -188,7 +188,33 @@ Load it in Zen:
 4. Select `firefox-addon/manifest.json` from this repository.
 5. Keep Zen running while testing.
 
-Temporary add-ons are removed when the browser restarts. Reload this add-on after restarting Zen unless you package and install it permanently yourself.
+Temporary add-ons are removed when the browser restarts. Reload this add-on after restarting Zen unless you package and install it permanently yourself (see below).
+
+#### Installing it permanently (optional, recommended once you're done actively changing the add-on)
+
+Temporary loading is convenient for development, but it's a real annoyance for daily use: every Zen restart drops the add-on, and Zen silently falls back to the plain AMO Mozeidon add-on (if installed), which lacks the `<all_urls>` permission this fork needs for page content/selection extraction — tab/bookmark/history commands keep working, but page context silently stops.
+
+Firefox's Release channel normally requires all installed (non-temporary) add-ons to be signed by Mozilla, but **Zen Browser is built with `MOZ_REQUIRE_SIGNING: false`**, so it honors the `xpinstall.signatures.required` preference like Firefox Developer Edition/Nightly do. That makes a real, permanent install of this unsigned add-on possible:
+
+```bash
+cd firefox-addon
+npm run package
+cd ..
+```
+
+This produces `firefox-addon/mozeidon.xpi`. Then in Zen:
+
+1. Go to `about:config` and set:
+   - `extensions.experiments.enabled` → `true`
+   - `xpinstall.signatures.required` → `false`
+2. Go to `about:addons`.
+3. Click the gear icon (⚙️) → **Install Add-on From File…**.
+4. Select `firefox-addon/mozeidon.xpi`.
+5. Approve the permission prompts.
+
+This add-on's `manifest.json` uses the same extension ID (`mozeidon-addon@egovelox.com`) as the official AMO Mozeidon add-on, so installing it this way replaces that weaker version outright — Zen will no longer have anything to silently fall back to. Confirm afterward in `about:addons` that there's a single Mozeidon entry with the full permission set, including "Access your data for all websites".
+
+Note that `xpinstall.signatures.required = false` disables signature verification for *any* unsigned add-on you install this way going forward, not just this one — fine for your own trusted builds, just be aware it's toggled. If you resume active development later, either go back to loading it as a temporary add-on (no need to flip these preferences back), or rebuild (`npm run package`) and reinstall the `.xpi` after making changes.
 
 ### 6. Verify the CLI and add-on connection
 
@@ -234,11 +260,15 @@ Run the extension in development mode:
 npm run dev
 ```
 
-Raycast will build the local extension and show the `Zen Context` commands while the dev server is running.
+Raycast will build the local extension and show the `Zen Context` commands while the dev server is running, with hot-reload on save. While active, the commands show a "Development" badge and are pinned to the top of root search.
 
-After Raycast has imported the development extension, you can stop `npm run dev` with `Ctrl-C`. If Raycast later stops showing the local extension or you change code, run `npm run dev` again.
+**Stopping development mode.** Raycast's local-extension registration is tied to `ray develop` actively running and signaling Raycast after each build — simply killing the `npm run dev` process (`Ctrl-C`, closing the terminal, or letting it exit on its own) does *not* reliably keep the extension registered. Raycast can later drop it entirely (emptying its local extension storage), and the commands disappear until you run `npm run dev` again.
 
-You can also run a production-style local build:
+To keep using the commands without needing `npm run dev` running at all, use Raycast's own **Stop Development** action instead: find "Zen Context" in Raycast's root search or **Manage Extensions**, open its actions (`⌘K`), and choose **Stop Development**. This cleanly detaches the extension from the live dev server — the commands stay registered and keep working from the last build, now shown with a small "local extension" icon instead of the "Development" badge, and no longer pinned to the top of root search.
+
+If you make code changes later, run `npm run dev` again to resume hot-reload, then **Stop Development** again once you're done.
+
+You can also run a production-style local build first, so `npm run dev` picks up the latest compiled output:
 
 ```bash
 npm run build
@@ -436,6 +466,12 @@ Reload the local add-on from `firefox-addon/manifest.json`, then rerun:
 ```bash
 mozeidon context active --format markdown
 ```
+
+If this keeps happening after every Zen restart, you're likely hitting the temporary-add-on limitation — see [Installing it permanently](#installing-it-permanently-optional-recommended-once-youre-done-actively-changing-the-add-on) above.
+
+### Zen Context commands disappeared from Raycast
+
+If you previously ran `npm run dev` and later stopped it (`Ctrl-C`, closed the terminal, or it just exited) without using Raycast's **Stop Development** action, Raycast can drop the local extension's registration entirely. Run `npm run dev` again to bring the commands back, then use **Stop Development** (see [step 7](#7-install-and-run-the-raycast-extension)) this time so it doesn't happen again.
 
 ### `@zen` cannot access tools
 
