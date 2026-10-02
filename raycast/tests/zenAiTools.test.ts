@@ -359,6 +359,26 @@ test("zen_list_tabs returns focused and active tabs first with a limit", async (
   }
 });
 
+test("zen_list_tabs sorts a tab in the focused window ahead of the globally active tab in an unfocused window", async () => {
+  // Regression test: windowFocused is `true` or `undefined` (never `false`),
+  // so Number(windowFocused) on an unfocused tab is NaN. A naive `||`
+  // tiebreak treats NaN as falsy just like a real tie and silently falls
+  // through to the active comparison, even when the two tabs genuinely
+  // differ in focused-window status.
+  const tabs = [
+    tab({ id: 1, windowId: 10, title: "ActiveInUnfocused", url: "https://a.example.com", active: true }),
+    tab({ id: 2, windowId: 20, title: "InFocusedWindow", url: "https://b.example.com", active: false }),
+  ];
+  const dependencies = createDependencies({ tabs });
+  const result = await zenListTabs(
+    {},
+    { ...dependencies, listTabs: async () => ({ data: tabs, windows: [{ id: 20, isLastFocused: true }] }) },
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.data.tabs.map((t) => t.title), ["InFocusedWindow", "ActiveInUnfocused"]);
+});
+
 test("zen_search_tabs deterministically matches title and URL", async () => {
   const result = await zenSearchTabs({ query: "oauth docs" }, createDependencies({ tabs: sampleTabs() }));
 

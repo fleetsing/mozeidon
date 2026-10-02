@@ -995,10 +995,17 @@ function mapToolTabs(payload: MozeidonTabsWithWindowsPayload): ZenToolTab[] {
 }
 
 function sortToolTabs(tabs: ZenToolTab[]): ZenToolTab[] {
-  return [...tabs].sort(
-    (first, second) =>
-      Number(second.windowFocused) - Number(first.windowFocused) || Number(second.active) - Number(first.active),
-  );
+  // windowFocused is `true` or `undefined` (never `false`, see mapToolTabs),
+  // so Number(windowFocused) on an unfocused tab is NaN, not 0. The `||`
+  // tiebreak idiom treats NaN as falsy just like a real tie, so it was
+  // silently falling through to the active comparison even when the two
+  // tabs genuinely differed in focused-window status - coerce to a real
+  // boolean first so every comparison yields an actual 0/1/-1 number.
+  return [...tabs].sort((first, second) => {
+    const focusDiff = Number(Boolean(second.windowFocused)) - Number(Boolean(first.windowFocused));
+    if (focusDiff !== 0) return focusDiff;
+    return Number(second.active) - Number(first.active);
+  });
 }
 
 function searchToolTabs(tabs: ZenToolTab[], query: string): ZenToolTabMatch[] {
