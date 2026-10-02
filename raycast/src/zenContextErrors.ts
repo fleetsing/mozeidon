@@ -4,7 +4,7 @@ export const CONTEXT_COMMAND_UNAVAILABLE_CODE = "context_command_unavailable";
 export const MOZEIDON_UNAVAILABLE_CODE = "mozeidon_unavailable";
 
 export const CONTEXT_COMMAND_UNAVAILABLE_MESSAGE =
-  "The configured Mozeidon CLI does not support Zen Context commands. Build or install this fork's current Mozeidon CLI, then update how this tool finds it (the Raycast extension's Mozeidon CLI filepath setting, or the MOZEIDON_CLI_PATH environment variable, depending on how you're running it).";
+  "The configured Mozeidon CLI does not support Zen Context commands. Build or install this fork's current Mozeidon CLI, then update where this tool finds it: in the Raycast extension, that's its Mozeidon CLI filepath preference; when running this as a standalone MCP server, that's the MOZEIDON_CLI_PATH environment variable.";
 
 export const MOZEIDON_UNAVAILABLE_MESSAGE =
   "Mozeidon could not reach Zen through the native app connection. Make sure Zen is running, the Mozeidon add-on is installed, and the native app/profile registration is current.";
