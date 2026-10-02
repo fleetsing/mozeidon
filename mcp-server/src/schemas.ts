@@ -43,9 +43,20 @@ export const zenGetTabContentSchema = z
       .number()
       .int()
       .optional()
-      .describe("Target tab id. Omit to use the active tab, or provide with a url/windowId to disambiguate."),
-    windowId: z.number().int().optional().describe("Target window id, used with tabId or url to disambiguate."),
-    url: z.string().optional().describe("Target tab's URL, used to find an unambiguous match when tabId is not known."),
+      .describe(
+        "Target tab id - must be provided together with windowId (not with url). Omit both tabId and windowId, and provide url instead, to target a tab by its URL. Omit all three to target the active tab.",
+      ),
+    windowId: z
+      .number()
+      .int()
+      .optional()
+      .describe("Target window id - must be provided together with tabId. Not used to disambiguate a url target."),
+    url: z
+      .string()
+      .optional()
+      .describe(
+        "Target tab's URL, used to find an unambiguous match when tabId/windowId are not provided. Fails with ambiguous_tab if more than one open tab has this URL - use tabId/windowId instead in that case.",
+      ),
     format: z.enum(["markdown", "text"]).optional().describe("Content format to return. Defaults to markdown."),
     requireContent: z
       .boolean()

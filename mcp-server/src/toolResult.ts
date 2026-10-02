@@ -9,8 +9,20 @@ export function toCallToolResult<T extends object>(response: ZenToolResponse<T>)
     };
   }
 
+  const { code, message } = response.error;
+  const extraLines = [
+    response.warnings.length ? `Warnings: ${response.warnings.join(", ")}` : undefined,
+    response.details ? `Details: ${JSON.stringify(response.details)}` : undefined,
+  ].filter((line): line is string => Boolean(line));
+
   return {
-    content: [{ type: "text", text: `Error (${response.error.code}): ${response.error.message}` }],
+    content: [{ type: "text", text: [`Error (${code}): ${message}`, ...extraLines].join("\n") }],
+    structuredContent: {
+      code,
+      message,
+      warnings: response.warnings,
+      ...(response.details ? { details: response.details } : {}),
+    },
     isError: true,
   };
 }

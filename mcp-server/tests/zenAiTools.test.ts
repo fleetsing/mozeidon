@@ -226,11 +226,14 @@ test("zen_get_selection_or_page reports the active page fetch error when no Rayc
   }
 });
 
-test("zen_get_selection_or_page never resolves a Raycast selection through this package's dependency wiring (no OS-level selection outside Raycast)", async () => {
-  // This is the real, documented behavior difference from the Raycast
-  // build (spec 020): getRaycastSelectedText always resolves to undefined
-  // here, so this tier is only reachable via the pure zenAiToolsCore.ts
-  // logic under test, never through this server's actual wiring.
+test("zen_get_selection_or_page's raycast-selection tier still works in the shared core logic, even though this server's real dependency wiring never triggers it", async () => {
+  // This exercises zenAiToolsCore.ts's shared fallback logic directly via an
+  // injected dependency - it does NOT reflect this server's actual runtime
+  // behavior. dependencies.ts (spec 020) always resolves undefined for
+  // getRaycastSelectedText(), since there's no OS-level "read the frontmost
+  // app's selection" capability outside Raycast, so in real use this tier is
+  // unreachable. This test only confirms the copied logic itself still
+  // handles a raycast-selection value correctly, matching Raycast's build.
   const result = await zenGetSelectionOrPage(
     {},
     createDependencies({

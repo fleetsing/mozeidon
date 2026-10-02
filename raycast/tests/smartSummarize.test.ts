@@ -333,7 +333,7 @@ test("Smart Summarize reports unsupported context CLI clearly", async () => {
     error: {
       code: "context_command_unavailable",
       message:
-        "The configured Mozeidon CLI does not support Zen Context commands. Build or install this fork's current Mozeidon CLI, then update the Raycast extension's Mozeidon CLI filepath setting if needed.",
+        "The configured Mozeidon CLI does not support Zen Context commands. Build or install this fork's current Mozeidon CLI, then update how this tool finds it (the Raycast extension's Mozeidon CLI filepath setting, or the MOZEIDON_CLI_PATH environment variable, depending on how you're running it).",
     },
   });
 });
