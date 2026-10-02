@@ -1,11 +1,20 @@
 # Zen Context for Raycast and Zen Browser
 
+**Zen Context** turns [Zen Browser](https://zen-browser.app/) into a local, scriptable context source for [Raycast](https://www.raycast.com/) and for AI tools. With it you can, all from Raycast:
+
+- search and switch Zen tabs, reopen recently closed tabs, and search bookmarks and history;
+- copy the active page as Markdown, summarize it, or ask a question about it with Raycast AI;
+- let an AI agent — Raycast's own `@zen` AI Extension, or any [MCP](https://modelcontextprotocol.io) client such as Claude Code or Claude Desktop — read what's open in Zen (active tab, selection, open tabs) when you ask it to.
+
+Everything runs locally and only on request: a Zen/Firefox-family browser add-on talks to a small native app, a Go CLI (`mozeidon`) talks to that native app, and the Raycast extension (plus an optional [MCP server](#mcp-server-optional)) builds on top of the CLI. No browsing data leaves your machine unless you explicitly trigger a Raycast AI command or ask an MCP client you've configured to use it.
+
 This repository is a personal fork of upstream [egovelox/mozeidon](https://github.com/egovelox/mozeidon). It keeps the Mozeidon browser add-on, native app, and CLI architecture, but the focus of this fork is now broader than the original bundled Raycast extension:
 
 - make Mozeidon work well with Zen Browser on macOS;
 - expose active-page and selected-text context from Zen;
 - provide first-class Raycast commands for page Markdown, summaries, and page-grounded questions;
-- expose `@zen` Raycast AI Extension tools for inspecting and controlling Zen through local Mozeidon APIs.
+- expose `@zen` Raycast AI Extension tools for inspecting and controlling Zen through local Mozeidon APIs;
+- expose the same read-only context to any MCP client through a standalone `mcp-server/` package.
 
 The Raycast extension in this fork is named **Zen Context**. The underlying executable and browser bridge are still named **Mozeidon**.
 
@@ -57,6 +66,9 @@ Compared with the original upstream project, this fork adds or changes:
   - `zen_get_tab_content`
   - `zen_open_or_focus_url`
 
+- **MCP server**
+  - A standalone `mcp-server/` package (`zen-mcp-server`) exposes the same context API, minus the one mutating tool, to any MCP client — see [MCP Server (optional)](#mcp-server-optional).
+
 - **Testing and specs**
   - Zen Context specs live in `docs/zen-context/specs/`.
   - Raycast unit tests cover command construction, context parsing, AI unavailable behavior, selection fallback, tool behavior, and eval prompt coverage.
@@ -71,6 +83,8 @@ Zen Context still uses the Mozeidon architecture:
 3. The Mozeidon CLI talks to the native app.
 4. The Raycast extension calls the local CLI.
 5. Raycast commands and Raycast AI tools display or send the resulting context only when you invoke them.
+
+Any MCP client (Claude Code, Claude Desktop, etc.) can reach the same context through `mcp-server/` instead of steps 4–5, by calling the CLI directly rather than going through Raycast — see [MCP Server (optional)](#mcp-server-optional).
 
 The native app is not a feature surface in this fork. Feature behavior is implemented in the Raycast extension, CLI, and browser add-on.
 
@@ -393,6 +407,26 @@ Initial tools:
 
 The first tool set excludes destructive actions. It does not close tabs, delete history, mutate bookmarks, or clear browsing data.
 
+## MCP Server (Optional)
+
+If you want an MCP client other than Raycast — Claude Code, Claude Desktop, or anything else that speaks [MCP](https://modelcontextprotocol.io) — to read Zen context, use the standalone server in `mcp-server/` instead of (or alongside) the Raycast extension. It wraps the same CLI and exposes the same five read-only tools as the `@zen` AI Extension (everything except `zen_open_or_focus_url`, which is deliberately left out of this read-only server).
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+Then register it with your MCP client, for example with Claude Code:
+
+```bash
+claude mcp add zen -- node /absolute/path/to/mcp-server/dist/index.js
+```
+
+See [`mcp-server/README.md`](mcp-server/README.md) for configuration (CLI path, profile selection) and [Spec 020](docs/zen-context/specs/020-mcp-read-only-server.md) for the full design, including why it's read-only and why it duplicates rather than shares code with the Raycast extension.
+
+Registering this server broadly (for example, in an MCP client's user-wide config rather than per-project) means any agent session using that client could read whatever's open in Zen. Scope it to projects where that's actually wanted, the same way you would for any other tool with access to your local machine.
+
 ## Useful CLI Commands
 
 Tabs:
@@ -537,6 +571,8 @@ Zen Context planning and specs live in:
 - `docs/zen-context/05-security-and-permissions.md`
 - `docs/zen-context/specs/010-raycast-zen-context-commands.md`
 - `docs/zen-context/specs/011-ai-extension-tools.md`
+- `docs/zen-context/specs/020-mcp-read-only-server.md`
+- [`mcp-server/README.md`](mcp-server/README.md)
 
 The upstream CLI reference remains useful for baseline Mozeidon commands:
 

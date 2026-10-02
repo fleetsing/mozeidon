@@ -1,6 +1,6 @@
 # AI Extension And MCP
 
-Zen Context supports initial Raycast AI workflows through `@zen` AI Extension tools. MCP remains a later optional wrapper.
+Zen Context supports initial Raycast AI workflows through `@zen` AI Extension tools, and an optional read-only MCP wrapper (`mcp-server/`, Spec 020) for MCP clients other than Raycast.
 
 ## AI Extension Direction
 
@@ -19,15 +19,17 @@ The first tool set is read-only except for the non-destructive `zen_open_or_focu
 
 ## MCP Direction
 
-An MCP wrapper is optional and should be thin. It should wrap the stable context API rather than inventing a parallel contract.
+Implemented as a standalone `mcp-server/` package (`zen-mcp-server`), a thin wrapper over the same context API used by the Raycast AI Extension tools rather than a parallel contract. It duplicates the portable core logic from `raycast/src/` instead of sharing it via a workspace (accepted tradeoff; see Spec 020 for why).
 
-Initial MCP tools should be read-only:
+Implemented MCP tools (all read-only), reusing the AI Extension tool names and contracts directly:
 
-- `zen_current_tab`
-- `zen_open_tabs`
-- `zen_recent_tabs`
+- `zen_get_active_context`
+- `zen_get_selection_or_page`
+- `zen_list_tabs`
+- `zen_search_tabs`
+- `zen_get_tab_content`
 
-Later tools may include tab switching or bookmark actions, but only after confirmation and safety behavior is defined.
+`zen_open_or_focus_url` (the one mutating tool in the underlying API) is deliberately not registered here. Exposing it, or any other mutating tool, requires its own spec and a designed MCP confirmation mechanism first.
 
 ## Safety Rules
 
@@ -53,7 +55,5 @@ Keep formatting separate from retrieval so tools can choose structured JSON or u
 ## Open Questions
 
 - Should Raycast AI tools add confirmation-gated mutating actions?
-- How should confirmation work across Raycast and MCP clients?
-- Should MCP expose only read-only tools by default?
+- How should confirmation work across Raycast and MCP clients, once a mutating MCP tool is added?
 - How should local memory be represented and cleared?
-- Which context fields should be promoted from internal contract fields to external MCP fields?

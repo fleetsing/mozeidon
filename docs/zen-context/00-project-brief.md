@@ -10,7 +10,7 @@ Build a local context layer for Zen Browser that can answer questions like:
 
 - What is the current active Zen tab?
 - What URL, title, domain, window, profile, and group is it associated with?
-- How should that context be formatted for clipboard actions, Raycast commands, AI extension tools, and later MCP tools?
+- How should that context be formatted for clipboard actions, Raycast commands, AI extension tools, and MCP tools?
 - Which richer context can be extracted safely, optionally, and with least privilege?
 
 ## Preferred Architecture
@@ -42,6 +42,7 @@ This repository currently contains:
 - Firefox-family add-on used by Zen in `firefox-addon/`.
 - Chromium add-on in `chrome-addon/` (inherited from upstream; not maintained in this fork and without the context extraction service).
 - Raycast extension in `raycast/`.
+- Read-only MCP server in `mcp-server/` (Spec 020), wrapping the same context API for non-Raycast MCP clients.
 - Zen compatibility documentation in `README.md`.
 
-The current Zen Context surface includes a Zen-first Raycast extension, context-aware Raycast commands, `@zen` Raycast AI Extension tools, a CLI context API, and Firefox-family add-on page extraction for Zen.
+The current Zen Context surface includes a Zen-first Raycast extension, context-aware Raycast commands, `@zen` Raycast AI Extension tools, a CLI context API, Firefox-family add-on page extraction for Zen, and a read-only MCP server for non-Raycast clients.
