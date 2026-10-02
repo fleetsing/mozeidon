@@ -24,6 +24,17 @@ const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
   openWorldHint: false,
 };
 
+// zen_get_tab_content can switch tab/window focus as part of reading a
+// background tab (spec 014's focus-then-read stabilization) and, with
+// restoreFocus: false, leaves that focus change in place - a real, visible
+// side effect that differs depending on which tab was targeted. It's still
+// read-only/non-destructive, but not idempotent in the sense MCP clients
+// rely on for safe, repeatable retries.
+const TAB_CONTENT_ANNOTATIONS: ToolAnnotations = {
+  ...READ_ONLY_ANNOTATIONS,
+  idempotentHint: false,
+};
+
 export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServer {
   const server = new McpServer({ name: "zen-mcp-server", version: "0.1.0" });
 
@@ -86,7 +97,7 @@ export function createZenMcpServer(dependencies: ZenAiToolDependencies): McpServ
       description:
         "Get content for the active or unambiguously identified Zen tab using the context API. Only call this when the user explicitly asks about a specific Zen tab's content - never proactively, and never to infer context the user hasn't asked you to look at.",
       inputSchema: zenGetTabContentSchema,
-      annotations: READ_ONLY_ANNOTATIONS,
+      annotations: TAB_CONTENT_ANNOTATIONS,
     },
     async (input) => toCallToolResult(await zenGetTabContent(input, dependencies)),
   );

@@ -3,9 +3,11 @@ import type { ZenToolResponse } from "./zenAiToolsCore.js";
 
 export function toCallToolResult<T extends object>(response: ZenToolResponse<T>): CallToolResult {
   if (response.ok) {
+    const warningsText = response.warnings.length ? `\n\nWarnings: ${response.warnings.join(", ")}` : "";
+
     return {
-      content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }],
-      structuredContent: response.data as Record<string, unknown>,
+      content: [{ type: "text", text: JSON.stringify(response.data, null, 2) + warningsText }],
+      structuredContent: { ...response.data, warnings: response.warnings } as Record<string, unknown>,
     };
   }
 

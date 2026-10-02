@@ -14,10 +14,28 @@ test("toCallToolResult maps a successful response to content and structuredConte
   const result = toCallToolResult(response);
 
   assert.equal(result.isError, undefined);
-  assert.deepEqual(result.structuredContent, data);
+  assert.deepEqual(result.structuredContent, { ...data, warnings: [] });
   assert.equal(result.content.length, 1);
   assert.equal(result.content[0].type, "text");
   assert.deepEqual(JSON.parse((result.content[0] as { text: string }).text), data);
+});
+
+test("toCallToolResult preserves warnings on a successful response, in both text and structuredContent", () => {
+  const data = { focusChanged: true, focusRestored: false };
+  const response = {
+    ok: true as const,
+    tool: "zen_get_tab_content" as const,
+    data,
+    warnings: ["focus_restore_failed"],
+  };
+
+  const result = toCallToolResult(response);
+
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(result.structuredContent, { ...data, warnings: ["focus_restore_failed"] });
+  const text = (result.content[0] as { text: string }).text;
+  assert.match(text, /focus_restore_failed/);
+  assert.deepEqual(JSON.parse(text.split("\n\nWarnings:")[0]), data);
 });
 
 test("toCallToolResult maps a failure response to an isError text result and structured error payload", () => {
