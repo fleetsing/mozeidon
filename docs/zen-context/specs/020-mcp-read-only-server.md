@@ -7,6 +7,7 @@ A new standalone package, `mcp-server/` (`zen-mcp-server`), wraps the existing Z
 ## Status
 
 - Implemented
+- Verified end-to-end against a real Zen session via a live Claude Code session connected to the registered MCP server (not just the raw stdio protocol tests from initial development) — confirmed real page content returned correctly for both a public and a private GitHub repo page, and confirmed the "ask-first" tool description guidance is what `tools/list` actually serves
 
 ## Problem
 
