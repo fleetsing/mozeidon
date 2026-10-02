@@ -23,7 +23,7 @@ The `zen_*` AI tools (`zen_get_active_context`, `zen_get_selection_or_page`, `ze
 
 - No mutating tools (`zen_open_or_focus_url` is not registered) and no confirmation-flow design work yet — deferred until this read-only pass proves out and a mutating tool is actually needed.
 - No code-sharing refactor between `raycast/` and `mcp-server/` (see "Code Duplication" below) — an accepted, documented tradeoff for this first pass, not a permanent decision.
-- No changes to `raycast/`.
+- No *behavior* changes to Raycast. (Post-review, a shared error-message string in `raycast/src/zenContextErrors.ts` was reworded alongside its `mcp-server/` copy to stop referencing Raycast-specific settings — see "Post-Review Fixes" below — with the matching test updated; this doesn't change what Raycast does, only wording in one error message.)
 
 ## Proposed Design
 
