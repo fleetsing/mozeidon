@@ -1,4 +1,7 @@
-import { MozeidonClientError } from "./mozeidonClient";
+// Copied from raycast/src/zenContextErrors.ts (see docs/zen-context/specs/020-mcp-read-only-server.md).
+// Only change from the Raycast source: relative import specifiers use explicit
+// .js extensions, required by this package's NodeNext ESM module resolution.
+import { MozeidonClientError } from "./mozeidonClient.js";
 
 export const CONTEXT_COMMAND_UNAVAILABLE_CODE = "context_command_unavailable";
 export const MOZEIDON_UNAVAILABLE_CODE = "mozeidon_unavailable";

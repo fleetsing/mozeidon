@@ -1,4 +1,9 @@
-import type { MozeidonTab } from "./interfaces";
+// Copied from raycast/src/zenAiToolsCore.ts (see docs/zen-context/specs/020-mcp-read-only-server.md).
+// Only changes from the Raycast source: relative import specifiers use
+// explicit .js extensions (this package's NodeNext ESM resolution requires
+// it), and `./interfaces` is this package's own minimal MozeidonTab-only
+// slice rather than Raycast's full (React-dependent) interfaces module.
+import type { MozeidonTab } from "./interfaces.js";
 import {
   classifyZenContextContent,
   getContentValue,
@@ -6,8 +11,8 @@ import {
   requireRealMarkdownContext,
   ZenContextError,
   type RaycastZenContext,
-} from "./zenContext";
-import { isContextCommandUnavailableError, mapMozeidonContextError } from "./zenContextErrors";
+} from "./zenContext.js";
+import { isContextCommandUnavailableError, mapMozeidonContextError } from "./zenContextErrors.js";
 
 export const ZEN_AI_TOOL_NAMES = [
   "zen_get_active_context",
