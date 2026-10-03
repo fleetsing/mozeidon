@@ -169,10 +169,12 @@ cat > "$HOME/Library/Application Support/Mozilla/NativeMessagingHosts/mozeidon.j
   "description": "Native messaging add-on to interact with your browser",
   "path": "$MOZEIDON_NATIVE_APP",
   "type": "stdio",
-  "allowed_extensions": ["mozeidon-addon@egovelox.com"]
+  "allowed_extensions": ["mozeidon-zen@fleetsing.github.io", "mozeidon-addon@egovelox.com"]
 }
 JSON
 ```
+
+`mozeidon-zen@fleetsing.github.io` is this fork's add-on; `mozeidon-addon@egovelox.com` is the upstream AMO add-on, kept so either one can connect.
 
 If Zen does not find the host through the Mozilla location on your machine, also mirror it into Zen's native-messaging directory:
 
@@ -204,31 +206,32 @@ Load it in Zen:
 
 Temporary add-ons are removed when the browser restarts. Reload this add-on after restarting Zen unless you package and install it permanently yourself (see below).
 
-#### Installing it permanently (optional, recommended once you're done actively changing the add-on)
+#### Installing it permanently (recommended once you're done actively changing the add-on)
 
-Temporary loading is convenient for development, but it's a real annoyance for daily use: every Zen restart drops the add-on, and Zen silently falls back to the plain AMO Mozeidon add-on (if installed), which lacks the `<all_urls>` permission this fork needs for page content/selection extraction — tab/bookmark/history commands keep working, but page context silently stops.
+Temporary loading is convenient for development, but it's a real annoyance for daily use: every Zen restart drops the add-on, and Zen silently falls back to the plain AMO Mozeidon add-on (if installed), which lacks the `<all_urls>` permission this fork needs for page content/selection extraction. Tab/bookmark/history commands keep working, but page context silently stops.
 
-Firefox's Release channel normally requires all installed (non-temporary) add-ons to be signed by Mozilla, but **Zen Browser is built with `MOZ_REQUIRE_SIGNING: false`**, so it honors the `xpinstall.signatures.required` preference like Firefox Developer Edition/Nightly do. That makes a real, permanent install of this unsigned add-on possible:
+Zen and Firefox only permanently install add-ons signed by Mozilla. This fork's add-on has its own ID (`mozeidon-zen@fleetsing.github.io`) so it can be signed through AMO's **unlisted** channel: Mozilla signs it, but nothing is published on addons.mozilla.org. See [Spec 023](docs/zen-context/specs/023-signed-firefox-addon.md).
 
-```bash
-cd firefox-addon
-npm run package
-cd ..
-```
+1. Create AMO API credentials at <https://addons.mozilla.org/developers/addon/api/key/>. Signing under the fork's ID requires the AMO account that first signed it; anyone else forking this repo should change `browser_specific_settings.gecko.id` in `firefox-addon/manifest.json` to their own ID first (and add it to the native-messaging manifest above).
+2. Bump `version` in `firefox-addon/manifest.json` if this version has already been signed. AMO never signs the same version twice.
+3. Sign:
 
-This produces `firefox-addon/mozeidon.xpi`. Then in Zen:
+   ```bash
+   cd firefox-addon
+   export WEB_EXT_API_KEY="user:..."   # JWT issuer
+   export WEB_EXT_API_SECRET="..."     # JWT secret
+   npm run sign
+   cd ..
+   ```
 
-1. Go to `about:config` and set:
-   - `extensions.experiments.enabled` → `true`
-   - `xpinstall.signatures.required` → `false`
-2. Go to `about:addons`.
-3. Click the gear icon (⚙️) → **Install Add-on From File…**.
-4. Select `firefox-addon/mozeidon.xpi`.
-5. Approve the permission prompts.
+   This builds the add-on, lints it, uploads it together with its readable source (the bundle is minified), and waits for AMO to sign it. The signed `.xpi` is written to `firefox-addon/web-ext-artifacts/`. If it times out waiting for approval, download the signed file from the AMO developer hub later.
+4. In Zen's `about:addons`, remove any older `mozeidon` entries: the unsigned build from earlier instructions and the AMO Mozeidon add-on. They have a different ID, so the new one won't replace them, and only one add-on should talk to the native app.
+5. If you previously disabled signature checks, restore them in `about:config`: `xpinstall.signatures.required` → `true` and `extensions.experiments.enabled` → `false`. Then restart Zen.
+6. In `about:addons`, click the gear icon (⚙️) → **Install Add-on From File…** and select the signed `.xpi`. Approve the permission and data-collection prompts.
 
-This add-on's `manifest.json` uses the same extension ID (`mozeidon-addon@egovelox.com`) as the official AMO Mozeidon add-on, so installing it this way replaces that weaker version outright — Zen will no longer have anything to silently fall back to. Confirm afterward in `about:addons` that there's a single Mozeidon entry with the full permission set, including "Access your data for all websites".
+Confirm afterward in `about:addons` that there's a single Mozeidon entry with the full permission set, including "Access your data for all websites", and that it survives a Zen restart.
 
-Note that `xpinstall.signatures.required = false` disables signature verification for *any* unsigned add-on you install this way going forward, not just this one — fine for your own trusted builds, just be aware it's toggled. If you resume active development later, either go back to loading it as a temporary add-on (no need to flip these preferences back), or rebuild (`npm run package`) and reinstall the `.xpi` after making changes.
+To update later, bump the version, run `npm run sign` again, and install the new `.xpi` over the old one.
 
 ### 6. Verify the CLI and add-on connection
 

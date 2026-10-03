@@ -8,8 +8,11 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "mozeidon-addon@egovelox.com",
-      "strict_min_version": "70.0"
+      "id": "mozeidon-zen@fleetsing.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["browsingActivity", "websiteContent", "bookmarksInfo"]
+      }
     }
   },
   "background": {

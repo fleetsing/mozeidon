@@ -22,4 +22,5 @@ Working agreements:
 - Do not add production dependencies without justification.
 - Run relevant tests, linting, and builds before calling implementation work complete.
 - Summarize changed files, validation results, and unresolved risks.
+- The Zen/Firefox add-on is installed as an AMO-signed `.xpi` (Spec 023), so `firefox-addon/` changes don't reach Zen until it is re-signed and reinstalled. Before each `npm run sign`, bump `version` in `firefox-addon/manifest.json` (and `package.json` to match): AMO never signs the same version twice. Signing needs the user's AMO credentials in their own terminal; never ask for them in chat.
 - This repo has two remotes: `origin` (`fleetsing/mozeidon`, this fork) and `upstream` (`egovelox/mozeidon`, read-only reference). Never push branches or open pull requests against `upstream`. Branches, pushes, and PRs (`gh pr create`) must target `origin`/`fleetsing/mozeidon`. `upstream`'s push URL is intentionally disabled; `gh repo set-default` is set to `fleetsing/mozeidon` so `gh pr create` defaults there without needing `--repo`.
