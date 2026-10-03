@@ -8,6 +8,7 @@
     "prettier": "prettier --write 'src/**/*.ts'",
     "build": "webpack --devtool false",
     "package": "npm run build && rm -f mozeidon.xpi && zip -r mozeidon.xpi manifest.json dist icons -x '*.DS_Store'",
+    "sign": "./sign.sh",
     "test": "tsc -p tsconfig.test.json && node --test tests/*.test.js"
   },
   "engines": {
